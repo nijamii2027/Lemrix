@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="/motion-state.js?v=autostart-7"></script>
+  <meta name="theme-color" content="#182359">
+  <title>A little world — Cook’d × Lemrix</title>
+  <meta name="description" content="The Cook’d and Lemrix characters, brought into a little moonlit 3D world. An interactive animation study inspired by the original collaboration artwork.">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../assets/fonts.css">
+  <link rel="stylesheet" href="./world.css?v=story-25">
+  <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="home" href="../" aria-label="Back to Lemrix"><span class="logo-crop"><img src="../assets/rebrand/lemrix-new-logo.png" alt="Lemrix TCG"></span></a>
+    <p class="edition">Cook’d <span>×</span> Lemrix</p>
+    <a class="back" href="../">Back to Lemrix <svg class="route-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15 15 5m-7 0h7v7"/></svg></a>
+  </header>
+  <main>
+    <div class="introduction">
+      <h1>Something’s<br>cooking<span class="fullstop">.</span></h1>
+      <p class="intro-copy">Explore the Cook’d × Lemrix storefront study.</p>
+      <button class="film-link" id="open-film">Watch the animation <svg class="route-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15 15 5m-7 0h7v7"/></svg></button>
+    </div>
+    <div class="world" id="world" aria-label="Interactive three-dimensional scene: the Cook’d mascot and blue Lemrix mascot outside their warmly lit shop under a crescent moon.">
+      <img class="fallback-film" id="rendered-world" src="./duo-render.jpg" alt="Cook’d and Lemrix together in their animated little world" hidden>
+      <canvas class="fallback-film" id="rendered-frames" width="384" height="288" data-atlas="./study-frames.jpg" data-columns="8" data-frames="48" data-fps="8" aria-hidden="true" hidden></canvas>
+      <img class="fallback" src="../assets/cookd-story/chapter-01.jpg" alt="The original illustrated Cook’d and Lemrix characters outside the shop at night." hidden>
+      <div class="loading" id="loading"><svg class="loading-star" width="28" height="28" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3z"/></svg><p>Loading the storefront…</p><span class="loading-line"></span></div>
+      <p class="render-error" id="render-error" role="status" hidden>This device couldn’t open the 3D scene.<br>The original artwork is here instead. <button id="retry">Try again <svg class="route-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15 15 5m-7 0h7v7"/></svg></button></p>
+      <canvas id="scene" aria-label="3D scene. Drag horizontally to look around; use the buttons below to change the view." tabindex="0"></canvas>
+      <span class="drag-hint" id="drag-hint"><svg viewBox="0 0 48 18" fill="none" aria-hidden="true"><path d="M5 9h38M10 4 5 9l5 5M38 4l5 5-5 5" stroke="currentColor"/></svg><span>DRAG TO LOOK AROUND</span></span>
+    </div>
+    <div class="scene-caption"><span class="caption-dot" aria-hidden="true"></span><p id="caption">Cook’d × Lemrix storefront</p></div>
+    <div class="controls" aria-label="Scene controls">
+      <div class="views" role="group" aria-label="Choose a view">
+        <button class="view-button active" data-view="scene" aria-pressed="true"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m3 8 7-4 7 4v7l-7 4-7-4Z M3 8l7 4 7-4M10 12v7"/></svg><span>The little world</span></button>
+        <button class="view-button" data-view="duo" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 17v-2c0-3 7-3 7 0v2M11 17v-2c0-3 7-3 7 0v2"/><circle cx="5.5" cy="6" r="3"/><circle cx="14.5" cy="6" r="3"/></svg><span>Meet the duo</span></button>
+      </div>
+      <span class="control-divider"></span>
+
+      <button class="icon-control" id="replay" aria-label="Replay the character animation"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 6a6 6 0 1 1-1 7M5 2v5H1"/></svg></button>
+    </div>
+    <footer class="bottom-bar">
+      <button id="open-reference" class="reference-button"><img src="../assets/cookd-story/chapter-01.jpg" alt=""><span>The original comic<small>View the panel <svg class="route-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15 15 5m-7 0h7v7"/></svg></small></span></button>
+      <p class="study-note">Cook’d × Lemrix animation study</p>
+    </footer>
+  </main>
+  <dialog id="reference-dialog" aria-labelledby="reference-title">
+    <button class="close-reference" aria-label="Close original artwork">×</button>
+    <img src="../assets/cookd-story/chapter-01.jpg" alt="Original collaboration announcement: the apron-wearing Cook’d mascot and the blue Lemrix mascot look towards their warmly lit shop, holding hands under a crescent moon.">
+    <div><h2 id="reference-title">The original comic</h2><p>The opening panel from the Cook’d × Lemrix announcement.</p><a href="https://www.instagram.com/p/DebAs8Mk-uH/" target="_blank" rel="noopener noreferrer">View the original announcement <svg class="route-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15 15 5m-7 0h7v7"/></svg></a></div>
+  </dialog>
+  <dialog class="film-dialog" id="film-dialog" aria-labelledby="film-title">
+    <button class="close-film" aria-label="Close rendered animation">×</button>
+    <video id="rendered-film" controls playsinline preload="none" poster="./duo-render.jpg" aria-label="A six-second rendered animation of the Cook’d and Lemrix mascots together outside their shop"><source src="./mascot-study.mp4" type="video/mp4">Your browser cannot play this video. <a href="./mascot-study.mp4">Download the rendered animation.</a></video>
+    <div><h2 id="film-title">Cook’d × Lemrix animation</h2></div>
+  </dialog>
+  <noscript><style>.loading,#scene,.controls,.drag-hint{display:none}.fallback[hidden]{display:block!important}</style><p class="noscript">Enable JavaScript to explore the 3D scene.</p></noscript>
+  <script src="/play/frame-loop.js?v=shore-12" defer></script>
+  <script src="./world-entry.js?v=storefront-2" defer></script>
+</body>
+</html>

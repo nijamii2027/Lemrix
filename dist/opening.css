@@ -1,0 +1,440 @@
+/* Shared colour, type and framing for the cabinet and its shop. */
+.lemrix-site {
+ --linen:#f2e6cb;
+ --cream:#fff7e5;
+ --lamp:#f5cd7d;
+ --wash:#dce7e7;
+ --line:#18235933;
+ --outline:1.5px solid var(--ink);
+ --panel-radius:18px;
+ --gutter:clamp(22px,4.4vw,66px);
+ --nav-height:66px;
+ --section-space:clamp(65px,8vw,115px);
+ background:var(--paper);
+}
+html:has(.lemrix-site){scroll-padding-top:82px}
+.lemrix-site .wrap{max-width:1340px;padding-inline:var(--gutter)}
+.lemrix-site .eyebrow{font-size:10px;letter-spacing:.13em;font-weight:700}
+.lemrix-site .button{font-size:13px;gap:16px;min-height:44px;padding:10px 18px}
+.lemrix-site .text-link{font-size:13px;gap:10px;line-height:1.35}
+.lemrix-site .button-blue:hover,.lemrix-site .button-blue:focus-visible{background:#2f3b71}
+.lemrix-site .mini-moon{box-shadow:-4px 3px 0 var(--ink);width:13px;height:13px}
+
+.lemrix-site .nav-world {
+ position:sticky;
+ top:0;
+ z-index:20;
+ background:#faf2dff5;
+ backdrop-filter:blur(14px);
+ box-shadow:inset 0 -1px var(--line);
+}
+.lemrix-site .site-header{height:var(--nav-height)}
+.lemrix-site .site-header .brand-image{width:46px}
+.lemrix-site .desktop-nav{margin-left:0;gap:clamp(18px,3.6vw,58px);font-size:13px}
+.lemrix-site .desktop-nav a{font-size:inherit}
+.lemrix-site .nav-actions{gap:8px}
+.lemrix-site .nav-actions .icon-button{width:42px;height:42px;border:0}
+.lemrix-site .nav-actions .save-total{top:0;right:0;background:var(--lamp);min-width:15px;height:15px}
+.lemrix-site .nav-actions .shop-link{margin-left:5px;min-height:38px;padding-inline:15px;font-size:12px}
+.lemrix-site .mobile-menu {
+ padding:6px var(--gutter) 16px;
+ background:var(--paper);
+ color:var(--ink);
+ border-bottom-color:var(--line);
+}
+.lemrix-site .mobile-menu a{border-color:var(--line);min-height:43px}
+.lemrix-site .mobile-menu span{color:var(--muted)}
+
+.opening-window {
+ padding:16px clamp(14px,2.15vw,30px) clamp(43px,4.7vw,62px);
+ border:var(--outline);
+ border-radius:var(--panel-radius);
+ background:var(--ink);
+ color:var(--paper);
+}
+.window-heading {
+ display:flex;
+ justify-content:space-between;
+ align-items:center;
+ margin-bottom:12px;
+ color:var(--butter);
+ font-size:9px;
+ font-weight:700;
+ letter-spacing:.14em;
+}
+.window-panes {
+ display:grid;
+ grid-template-columns:minmax(0,1fr) minmax(0,1.55fr) minmax(0,1fr);
+ gap:clamp(8px,1.25vw,16px);
+}
+.window-pane {
+ min-width:0;
+ display:flex;
+ flex-direction:column;
+ text-align:left;
+ border:1px solid #faf2df72;
+ border-radius:10px;
+ overflow:hidden;
+ color:var(--ink);
+ background:var(--cream);
+}
+.window-pane:focus-visible{outline-color:var(--lamp);outline-offset:3px}
+.window-picture {
+ position:relative;
+ display:grid;
+ place-items:center;
+ height:clamp(206px,23vw,315px);
+ overflow:hidden;
+}
+.window-pikachu .window-picture{background:#dfd2b6}
+.window-lugia .window-picture{background:#b5cbd3}
+.window-collab .window-picture{background:var(--ink)}
+.window-picture img{width:100%;height:100%;object-fit:contain;transition:scale .45s var(--motion-ease)}
+.window-pane:not(.window-collab) img {
+ position:absolute;
+ inset:8% 0 auto;
+ height:84%;
+ mix-blend-mode:multiply;
+ filter:drop-shadow(3px 10px 12px #18235945);
+}
+.window-collab .window-picture img{position:absolute;inset:0}
+.window-collab .window-model{object-fit:contain}
+.window-pane:hover img{scale:1.055}
+.window-caption {
+ min-height:38px;
+ padding:5px 10px;
+ display:flex;
+ align-items:center;
+ gap:8px;
+ border-top:1px solid var(--ink);
+ font-size:12px;
+ font-weight:700;
+ line-height:1.2;
+}
+.window-caption small{font-size:8px;color:var(--muted)}
+.window-caption span{margin-left:auto;font-size:13px}
+
+.lemrix-site :is(.collab-copy,.kitchen-copy,.live-copy,.keepsake-feature-copy) h2 {
+ margin:10px 0 0;
+ font-size:clamp(37px,5.45vw,78px);
+ line-height:.99;
+ letter-spacing:-.062em;
+}
+.archive-workspace {
+ padding:0 10px 10px;
+ border:var(--outline);
+ border-radius:var(--panel-radius);
+ background:var(--linen);
+}
+.archive-top {
+ display:flex;
+ align-items:center;
+ gap:18px;
+ min-height:49px;
+ padding:0 11px;
+ border-bottom:1px solid var(--line);
+ font-size:12px;
+}
+.archive-title{display:flex;align-items:center;gap:8px;font-weight:700}
+.archive-title svg{width:15px;height:15px;stroke:currentColor;stroke-width:1.3}
+.archive-top :is(a,.text-link){margin-left:auto;font-size:11px}
+.archive-top .text-link{border:0;padding:0}
+.archive-top a:hover{text-decoration:underline;text-underline-offset:4px}
+.archive-workspace .catalogue-toolbar{margin:0;padding:7px 5px;align-items:center}
+.archive-workspace .filter-list{gap:4px}
+.archive-workspace .filter {
+ padding:0 12px;
+ min-height:36px;
+ border-radius:30px;
+ border:1px solid transparent;
+ font-size:11px;
+}
+.archive-workspace .filter.active{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.archive-workspace .sort-button{min-height:34px;padding:0 3px 0 12px;border-left:1px solid var(--line);font-size:11px}
+.archive-workspace .product-grid{gap:9px}
+.archive-workspace .product {
+ min-width:0;
+ background:var(--cream);
+ border:1px solid var(--line);
+ border-radius:9px;
+}
+.archive-workspace .product-media {
+ height:auto;
+ aspect-ratio:1 / 1.12;
+ border:0;
+ border-radius:8px 8px 0 0;
+ background:#e8ddc4;
+}
+.archive-workspace .product[data-card="giratina"] .product-media{background:#e5d7cd}
+.archive-workspace .product[data-card="lugia"] .product-media{background:var(--wash)}
+.archive-workspace .product[data-card="gengar"] .product-media{background:#e4dee8}
+.archive-workspace .product-media::before{display:none}
+.archive-workspace .product-image-button{padding:25px 14% 16px}
+.archive-workspace .product-image-button img{filter:drop-shadow(0 8px 5px #1823592b)}
+.archive-workspace .product-image-button:hover img{transform:translateY(-4px) scale(1.03)}
+.archive-workspace .product-tag {
+ top:9px;
+ left:11px;
+ transform:none;
+ max-width:calc(100% - 22px);
+ font-size:8px;
+ font-weight:700;
+ letter-spacing:.085em;
+}
+.archive-workspace .product-save{width:40px;height:40px;right:9px;bottom:9px;background:var(--cream);border-color:var(--line)}
+.archive-workspace .product-save.saved{background:var(--ink)}
+.archive-workspace .product-info{padding:12px;background:var(--cream);border-radius:0 0 8px 8px}
+.archive-workspace .product-title{font-size:12px;font-weight:700;line-height:1.35}
+.archive-workspace .product-info>p{font-size:10px}
+.archive-workspace .product-ref{margin-top:9px;padding-top:7px;font-size:8px}
+
+.collab-feature{background:var(--linen);border-block:var(--outline)}
+.lemrix-site .collab-section{background:none;color:var(--ink);padding-block:var(--section-space)}
+.lemrix-site .collab-section::before{display:none}
+.lemrix-site .collab-inner {
+ grid-template-columns:minmax(0,1fr) minmax(0,1.12fr);
+ align-items:center;
+ gap:clamp(30px,8vw,110px);
+}
+.lemrix-site .collab-copy .eyebrow,.lemrix-site .collab-copy>p:not(.eyebrow){color:var(--ink)}
+.lemrix-site .collab-copy>p:not(.eyebrow){font-size:15px;line-height:1.5;max-width:365px}
+.lemrix-site .collab-copy .collab-lead {
+ margin:17px 0 9px;
+ color:var(--ink)!important;
+ font-size:20px!important;
+ font-weight:700;
+}
+.lemrix-site .collab-status {
+ margin:20px 0;
+ padding:12px 0;
+ border-color:var(--line);
+ font-size:10px;
+ font-weight:700;
+}
+.lemrix-site .collab-status small{color:var(--muted);font-size:12px;font-weight:400}
+.collab-links{display:flex;flex-wrap:wrap;align-items:center;gap:13px 18px}
+.lemrix-site .collab-art.story-gallery {
+ width:100%;
+ max-width:510px;
+ justify-self:center;
+ margin:0;
+ padding:12px 12px 8px;
+ rotate:0;
+ border:var(--outline);
+ border-radius:13px;
+ background:var(--cream);
+ box-shadow:5px 5px var(--ink);
+}
+.lemrix-site .collab-art.story-gallery:hover{rotate:0}
+.lemrix-site .story-kicker{padding-bottom:9px;font-size:9px}
+.lemrix-site .story-image{position:relative;border:var(--outline);border-radius:6px}
+.story-image .story-outgoing{position:absolute;inset:0;z-index:0;pointer-events:none}
+.lemrix-site .story-image img:not(.story-outgoing){position:relative;z-index:1}
+.lemrix-site .story-arrow{width:42px;height:42px}
+.lemrix-site .story-arrow:focus-visible{outline-offset:2px}
+.lemrix-site .story-dots{margin-top:4px}
+.lemrix-site .story-dots button{min-width:33px;height:40px}
+
+.lemrix-site .kitchen-section {
+ padding:0 0 var(--section-space);
+ border:0;
+ background:none;
+ overflow:visible;
+}
+.lemrix-site .kitchen-composition {
+ display:grid;
+ grid-template-columns:minmax(0,.78fr) minmax(0,1.22fr);
+ align-items:center;
+ gap:clamp(22px,7vw,90px);
+}
+.kitchen-copy h2{max-width:460px}
+.kitchen-copy>p:last-child{margin-top:14px;font-size:15px;line-height:1.45}
+.lemrix-site .kitchen-scene {
+ width:100%;
+ margin:0;
+ border:var(--outline);
+ border-radius:var(--panel-radius);
+ background:var(--ink);
+ color:var(--paper);
+ overflow:hidden;
+}
+.lemrix-site .kitchen-art{aspect-ratio:640 / 405}
+.lemrix-site .kitchen-hint {
+ margin:0;
+ padding:5px 13px;
+ min-height:43px;
+ width:100%;
+ justify-content:center;
+ border-top:1px solid #faf2df50;
+ background:var(--cream);
+ color:var(--ink);
+ font-size:13px;
+ letter-spacing:0;
+ font-weight:700;
+}
+.lemrix-site .kitchen-hint>span:first-child{color:var(--ink);font-size:18px}
+.lemrix-site .kitchen-scene:hover .kitchen-hint{background:var(--lamp)}
+.lemrix-site .kitchen-glint{color:var(--lamp)}
+.keepsake-feature {
+ position:relative;
+ padding-block:clamp(50px,7vw,94px);
+ background:radial-gradient(ellipse at 75% 55%,#354675a3,transparent 61%),var(--ink);
+}
+.keepsake-feature-inner{display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:clamp(30px,6vw,86px)}
+.keepsake-feature-copy .eyebrow{display:flex;align-items:center;gap:10px;color:var(--butter)}
+.keepsake-feature-copy .mini-moon{box-shadow:-4px 3px 0 var(--lamp)}
+.keepsake-feature-copy>p:not(.eyebrow){margin-top:14px;max-width:350px;font-size:15px;line-height:1.6;color:var(--paper)}
+.keepsake-feature .hero-collectible{position:relative;inset:auto;width:min(335px,88%);justify-self:center;margin:0}
+.keepsake-feature .adventure-lane{margin-top:22px}
+
+.live-feature {
+ display:grid;
+ grid-template-columns:minmax(0,.86fr) minmax(0,1fr);
+ align-items:center;
+ gap:clamp(28px,9vw,126px);
+ padding-block:var(--section-space);
+}
+.live-photo {
+ display:block;
+ width:100%;
+ max-width:450px;
+ justify-self:center;
+ padding:10px 10px 0;
+ border:var(--outline);
+ border-radius:12px;
+ background:var(--wash);
+}
+.live-image{display:block;aspect-ratio:1.12;overflow:hidden;border:1px solid var(--ink);border-radius:5px;background:#426767}
+.live-image img{width:100%;height:114%;object-fit:cover;object-position:50% 42%;translate:0 calc(var(--parallax-y,0px) - 15px)}
+.live-photo-caption{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 2px;font-size:12px}
+.live-copy>p:not(.eyebrow){max-width:360px;margin:15px 0 22px;font-size:15px;line-height:1.5}
+.lemrix-site .channel{justify-content:space-between;padding-block:12px}
+.lemrix-site .channel b{font-size:14px}
+.lemrix-site .channel small{margin-top:1px;font-size:12px}
+.lemrix-site .channel-arrow{font-size:20px}
+.lemrix-site .lucky-panel{border:var(--outline);border-radius:var(--panel-radius);background:var(--linen)}
+.lemrix-site .wheel-orbit-star{display:none}
+.lemrix-site .trade-section{padding-top:10px}
+.lemrix-site .faq-section h2{font-size:clamp(35px,4.7vw,66px);line-height:1}
+.lemrix-site :is(.trade-copy,.faq-list) p{font-size:13px}
+.lemrix-site .faq-list summary{font-size:14px}
+.lemrix-site .footer-links a,.lemrix-site .footer-links p{font-size:12px}
+.lemrix-site .footer-links>div>span{font-size:9px}
+.lemrix-site .footer-bottom{font-size:10px}
+.lemrix-site .trademark-note{font-size:10px;opacity:.68}
+.lemrix-site :is(.search-dialog,.product-dialog,.saved-dialog,.enquiry-dialog){background:var(--paper)}
+
+.shop-page .shop-hero-inner {
+ grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);
+ min-height:0;
+ gap:clamp(30px,7vw,94px);
+ padding-block:clamp(42px,6.8vw,92px) clamp(28px,4vw,55px);
+}
+.shop-page .shop-intro h1{margin:18px 0;font-size:clamp(53px,7vw,105px);line-height:.96;letter-spacing:-.07em}
+.shop-page .shop-intro .eyebrow{color:var(--ink)}
+.shop-page .shop-intro>p:not(.eyebrow){max-width:320px;color:var(--muted);opacity:1;font-size:16px;line-height:1.45}
+.shop-page .shop-hero-actions{align-items:center;gap:15px 20px;margin-top:22px}
+.shop-page .adventure-lane,.shop-page .passport-trigger{border-color:var(--line)}
+.shop-page .passport-trigger,.shop-page .passport-glyph{color:var(--ink)}
+.shop-page .passport-trigger:hover{border-color:var(--ink)}
+.shop-page .shop-card-theatre {
+ width:100%;
+ max-width:none;
+ height:auto;
+ margin:0;
+ padding:16px 13px 0;
+ border:var(--outline);
+ border-radius:var(--panel-radius);
+ background:var(--ink);
+}
+.shop-page .theatre-deck{height:clamp(270px,29vw,390px);overflow:hidden;border-radius:10px;background:#344069}
+.shop-page .theatre-card {
+ top:auto;
+ bottom:-6%;
+ height:86%;
+ padding:10px;
+ background:var(--linen);
+ border:var(--outline);
+ border-radius:9px;
+ box-shadow:0 6px 18px #10183f58;
+}
+.shop-page .theatre-card img{animation:none}
+.shop-page .theatre-card-one{left:5%;rotate:-10deg;background:#e2d6c6}
+.shop-page .theatre-card-two{left:32%;bottom:4%;rotate:1.5deg;height:89%;background:var(--cream)}
+.shop-page .theatre-card-three{right:5%;rotate:10deg;background:var(--wash)}
+.shop-page .theatre-ticket {
+ position:static;
+ display:flex;
+ justify-content:space-between;
+ align-items:center;
+ gap:15px;
+ padding:10px 3px;
+ rotate:0;
+ text-align:left;
+ color:var(--butter);
+ background:none;
+ box-shadow:none;
+ animation:none;
+}
+.shop-page .theatre-ticket::before,.shop-page .theatre-ticket::after{display:none}
+.shop-page .theatre-ticket span,.shop-page .theatre-ticket small{font-size:9px}
+.shop-page .theatre-ticket span{margin:0}
+.shop-page .shop-preview-note {
+ display:flex;
+ justify-content:space-between;
+ align-items:center;
+ gap:12px 20px;
+ padding-block:13px;
+ color:var(--muted);
+ font-size:13px;
+}
+.shop-page .shop-preview-note p{margin:0;font-size:inherit}
+.shop-page .shop-preview-note .text-link{color:var(--ink);flex:none}
+@media(max-width:760px) {
+ .lemrix-site{--gutter:19px;--nav-height:61px;--panel-radius:14px}
+ html:has(.lemrix-site){scroll-padding-top:74px}
+ .lemrix-site .site-header .brand-image{width:42px}
+ .lemrix-site .nav-actions{gap:4px}
+ .lemrix-site .nav-actions .icon-button{width:40px;height:40px}
+ .lemrix-site .eyebrow{font-size:9px;letter-spacing:.10em}
+ .opening-window{padding:9px 7px 35px}
+ .window-heading{margin:0 4px 7px;font-size:8px}
+ .window-panes{grid-template-columns:minmax(0,.8fr) minmax(0,1.8fr) minmax(0,.8fr);gap:5px}
+ .window-pane{border-radius:6px}
+ .window-picture{height:clamp(128px,40vw,250px)}
+ .window-pane:not(.window-collab) img{width:130%;max-width:none;left:-15%}
+ .window-caption{padding:4px 4px;gap:3px;font-size:8px;min-height:29px}
+ .window-caption small{display:none}
+ .window-caption span{font-size:10px}
+ .archive-workspace{padding:0 5px 5px}
+ .archive-top{padding:0 5px;min-height:43px;gap:10px;font-size:11px}
+ .archive-workspace .catalogue-toolbar{padding:5px 0}
+ .archive-workspace .filter-list{gap:1px}
+ .archive-workspace .filter{font-size:10px;min-height:38px;padding-inline:6px}
+ .archive-workspace .filter span{margin-left:1px}
+ .archive-workspace .product-grid{gap:5px}
+ .archive-workspace .product-tag{font-size:7px;top:7px;left:7px}
+ .archive-workspace .product-save{right:5px;bottom:5px}
+ .archive-workspace .product-image-button{padding:20px 10% 11px}
+ .archive-workspace .product-info{padding:8px 7px}
+ .archive-workspace .product-title{font-size:11px}
+ .archive-workspace .product-info>p{font-size:9px}
+ .archive-workspace .product-ref{font-size:7px}
+ .lemrix-site .collab-inner,.lemrix-site .kitchen-composition,.keepsake-feature-inner,.live-feature,.shop-page .shop-hero-inner{grid-template-columns:1fr}
+ .lemrix-site .collab-copy{padding:0}
+ .lemrix-site .collab-copy>p:not(.eyebrow){font-size:14px}
+ .lemrix-site .collab-copy>.collab-lead{font-size:18px!important}
+ .collab-links{gap:14px}
+ .lemrix-site .collab-art.story-gallery{width:calc(100% - 5px);justify-self:start;max-width:500px}
+ .lemrix-site .story-dots button{min-width:28px}
+ .keepsake-feature .hero-collectible{width:min(76vw,300px)}
+ .live-feature{gap:25px}
+ .live-copy{grid-row:1}
+ .live-photo{justify-self:start}
+ .lemrix-site .shop-hero-actions .button{font-size:13px}
+ .shop-page .shop-preview-note{flex-wrap:wrap}
+}
+@media(max-width:360px) {
+ .lemrix-site{--gutter:15px}
+ .archive-workspace .filter{padding-inline:4px}
+}

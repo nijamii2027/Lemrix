@@ -1,0 +1,9 @@
+*
+!dist/
+!dist/**
+dist/client/
+dist/server/
+dist/.openai/
+!api/
+!api/enquiries.mjs
+!vercel.json

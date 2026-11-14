@@ -1,0 +1,698 @@
+/* Shared print details for the homepage, counter and archive. */
+.lemrix-site {
+  --midnight: #202e62;
+  --powder: #bfdce7;
+  --sunlight: #ffd27b;
+  --ivory: #fff5dd;
+  --section-pad: clamp(64px, 8vw, 120px);
+  --frame-radius: 18px;
+}
+html:has(.lemrix-site) {
+  --anchor-padding: 82px;
+  scroll-padding-top: var(--anchor-padding);
+}
+
+.lemrix-site .site-header .brand-image { width: 58px; }
+.lemrix-site .desktop-nav { font-weight: 500; }
+.lemrix-site .desktop-nav a { color: var(--ivory); }
+.lemrix-site .desktop-nav a[aria-current="page"] { color: var(--sunlight); }
+.lemrix-site .nav-actions { gap: 8px; }
+.lemrix-site .nav-search { border-radius: 8px; }
+.lemrix-site .nav-actions .icon-button { min-width: 44px; height: 44px; }
+.lemrix-site .nav-actions .icon-button:hover { background: #fff5dd14; border-radius: 8px; }
+
+.lemrix-site .button.collector-primary {
+  gap: 16px;
+  min-height: 48px;
+  padding-inline: 18px;
+  border: 1.5px solid var(--ink);
+  border-radius: 7px;
+  background: var(--sunlight);
+  color: var(--ink);
+  box-shadow: 2px 3px 0 var(--ink);
+  transition: background .2s, box-shadow .2s, translate .2s;
+}
+.lemrix-site .button.collector-primary:not(:disabled):hover {
+  background: var(--ivory);
+  box-shadow: 3px 4px 0 var(--ink);
+  translate: 0 -2px;
+}
+.lemrix-site .button.collector-primary:not(:disabled):active {
+  box-shadow: 0 0 0 var(--ink);
+  translate: 1px 2px;
+}
+.lemrix-site .button.collector-primary:disabled {
+  opacity: 1;
+  font-size: 14px;
+  background: #f4e4bc;
+  color: #413b4d;
+  box-shadow: none;
+}
+
+/* The comic rides in on the opening wave. Its controls share the card mat. */
+.lemrix-site #the-club {
+  --chapter-travel: clamp(98px, 15svh, 146px);
+  --comic-width: min(31vw, max(154px, calc((100svh - var(--nav-height) - 176px) * .71)), 308px);
+  scroll-margin-top: calc(var(--nav-height) - var(--tide-height) - var(--anchor-padding));
+}
+.lemrix-site .collab-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.07fr);
+  column-gap: clamp(34px, 7vw, 100px);
+  row-gap: 22px;
+  align-content: center;
+  max-width: 1240px;
+}
+#club-title {
+  color: var(--ink);
+  font-size: clamp(47px, min(6.9vw, 12svh), 97px);
+}
+.lemrix-site .collab-follow {
+  min-height: 44px;
+  gap: 11px;
+  margin-top: 0;
+  border-bottom-color: var(--ink);
+}
+.collab-display {
+  grid-area: comic;
+  width: min(100%, 508px);
+  min-width: 0;
+  justify-self: center;
+  border: 2px solid var(--ink);
+  border-radius: var(--frame-radius);
+  box-shadow: 4px 5px 0 #18235924;
+}
+.comic-mat {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: clamp(18px, 3.4svh, 34px) 14px;
+  border-radius: calc(var(--frame-radius) - 2px) calc(var(--frame-radius) - 2px) 0 0;
+  background:
+    radial-gradient(ellipse at 48% 40%, #667eb7 0, #3f538d 38%, transparent 76%),
+    var(--midnight);
+  isolation: isolate;
+}
+.comic-mat::before {
+  position: absolute;
+  z-index: -1;
+  inset: 10% 12%;
+  border: 1px solid #e5e9fb56;
+  border-radius: 50%;
+  transform: rotate(-24deg);
+  content: "";
+  pointer-events: none;
+}
+.comic-card-slot { grid-area: auto; }
+.comic-card-slot::after { background: #0c153bad; }
+.comic-card:focus-visible { outline-color: var(--sunlight); }
+.comic-controls {
+  display: grid;
+  grid-template-columns: 54px 1fr 54px;
+  align-items: stretch;
+  min-height: 54px;
+  border-top: 2px solid var(--ink);
+  border-radius: 0 0 calc(var(--frame-radius) - 2px) calc(var(--frame-radius) - 2px);
+  background: var(--ivory);
+}
+.comic-step { display: grid; place-items: center; }
+.comic-step:first-child { border-right: 1px solid var(--line); }
+.comic-step:last-child { border-left: 1px solid var(--line); }
+.comic-step svg { width: 22px; height: 22px; }
+.comic-step[aria-disabled="true"] { color: #626479; cursor: default; }
+.comic-step[aria-disabled="false"]:hover { background: #ffd27b80; }
+.comic-step:focus-visible { outline-offset: -4px; }
+.comic-position {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  justify-items: center;
+  padding-inline: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.comic-progress {
+  position: relative;
+  width: min(84%, 140px);
+  height: 3px;
+  border-radius: 3px;
+  background: #d8d1c7;
+  overflow: hidden;
+}
+.comic-progress::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--comic-progress, 11.11%);
+  background: var(--ink);
+  content: "";
+  transition: width .25s ease;
+}
+
+/* Live breaks occupy one scene. The replay's frame contains the photograph. */
+.breaks-section {
+  background: var(--midnight);
+  color: var(--ivory);
+}
+.breaks-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
+  align-items: center;
+  gap: clamp(28px, 6vw, 84px);
+  padding-block: var(--section-pad);
+}
+.lemrix-site :is(.breaks-copy, .lucky-copy, .trade-copy) h2 {
+  margin: 0;
+  font-size: var(--section-heading);
+  line-height: .98;
+  letter-spacing: -.043em;
+}
+.lemrix-site :is(.breaks-copy, .lucky-copy, .trade-copy, .counter-copy) > p {
+  max-width: 39ch;
+  margin-block: 18px 24px;
+  color: inherit;
+  font-size: var(--copy-size);
+  line-height: 1.55;
+}
+.breaks-copy h2 {
+  max-width: 10ch;
+  overflow: clip;
+  overflow-clip-margin: .13em;
+  text-wrap: balance;
+}
+.breaks-copy h2 span { display: block; }
+.breaks-copy p { color: #f2e9da; }
+.breaks-copy strong { display: block; margin-bottom: 4px; color: var(--ivory); }
+.breaks-copy .collector-primary { border-color: #101838; }
+.breaks-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 22px;
+  margin-top: 14px;
+}
+.breaks-links a, .counter-whatnot {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: .3em;
+}
+.breaks-section :focus-visible { outline-color: var(--sunlight); }
+/* Gold stock surrounds the wheel housing. */
+.lemrix-site .lucky-section {
+  display: block;
+  padding: var(--section-pad) 0;
+  background: var(--sunlight);
+}
+.lemrix-site .lucky-panel {
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  border: 2px solid var(--ink);
+  border-radius: var(--frame-radius);
+  background: var(--ivory);
+  box-shadow: 5px 6px 0 var(--ink);
+}
+.lucky-copy {
+  align-self: center;
+  min-width: 0;
+  padding: clamp(22px, 5.2vw, 70px);
+}
+.lucky-copy h2 { max-width: 9ch; }
+.lucky-copy > .button { margin-top: 0; }
+.lemrix-site .rewards-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-block: 8px 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+.rewards-link #rewards-count { margin: 0; }
+.lemrix-site .wheel-rules { margin-top: 14px; border-top: 1px solid var(--line); }
+.lemrix-site .wheel-rules summary { min-height: 44px; font-size: 14px; }
+.lemrix-site .wheel-rules p, .lemrix-site .wheel-rules li { font-size: 13px; line-height: 1.45; }
+.lucky-machine {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  min-width: 0;
+  padding: clamp(34px, 4.8vw, 72px) clamp(26px, 5vw, 66px) 25px;
+  border-left: 2px solid var(--ink);
+  border-radius: 0 calc(var(--frame-radius) - 2px) calc(var(--frame-radius) - 2px) 0;
+  background:
+    radial-gradient(ellipse at 50% 50%, #485c99, transparent 70%),
+    var(--midnight);
+  color: var(--ivory);
+}
+.lemrix-site .wheel-stage {
+  width: min(100%, 370px);
+  margin: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--sunlight), 0 0 0 9px var(--ink), 0 12px 20px #0c143c9e;
+}
+.lemrix-site .wheel-pointer {
+  border-top-color: var(--sunlight);
+  filter: drop-shadow(0 2px 0 #151d49);
+}
+.lemrix-site .wheel-hub { border-color: var(--sunlight); }
+.lemrix-site .wheel-caption {
+  position: static;
+  min-height: 2.6em;
+  max-width: 33ch;
+  margin: 18px 0 0;
+  color: var(--ivory);
+  font-size: 13px;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+.lucky-mascot {
+  position: absolute;
+  z-index: 4;
+  right: -12%;
+  bottom: -4%;
+  width: 38%;
+  max-width: 135px;
+  height: auto;
+  filter: drop-shadow(0 3px 0 #151d4966);
+  pointer-events: none;
+}
+
+/* The binder scene leads into an intentionally quiet FAQ. */
+.lemrix-site .trade-section {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  display: block;
+  padding: 0;
+  background: var(--powder);
+}
+.trade-section::before {
+  position: absolute;
+  z-index: -1;
+  inset: -10% -15% -10% 57%;
+  border-left: 2px solid #a5c5d6;
+  background: var(--ivory);
+  transform: skewX(-12deg);
+  content: "";
+}
+.trade-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.03fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(28px, 6vw, 84px);
+  padding-block: var(--section-pad);
+}
+.trade-copy h2 { max-width: 13ch; }
+.lemrix-site .trade-copy .button { margin-top: 0; }
+.lemrix-site .trade-illustration {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  max-width: 520px;
+  height: auto;
+  min-width: 0;
+  aspect-ratio: 1.38;
+  justify-self: end;
+  border: 0;
+  background: radial-gradient(ellipse at 52% 86%, #9c866031, transparent 53%);
+}
+.trade-illustration img {
+  position: relative;
+  display: block;
+  width: 93%;
+  height: auto;
+  max-height: 100%;
+  object-fit: contain;
+  rotate: -4deg;
+}
+.lemrix-site .faq-section {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 29px;
+  max-width: 920px;
+  padding-block: var(--section-pad) calc(var(--section-pad) + 16px);
+}
+.lemrix-site .faq-section h2 {
+  margin: 0;
+  font-size: clamp(36px, 4.5vw, 62px);
+  line-height: 1;
+  letter-spacing: -.043em;
+}
+.faq-section .faq-list { border-top: 2px solid var(--ink); }
+.lemrix-site .faq-list details { border-color: #26366050; }
+.lemrix-site .faq-list summary { min-height: 56px; font-size: 16px; font-weight: 700; }
+.lemrix-site .faq-list details > p { font-size: 14px; line-height: 1.55; }
+.lemrix-site .faq-list details > :is(a, button) { font-size: 14px; }
+.lemrix-site .faq-list summary > span {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 27px;
+  aspect-ratio: 1;
+  border: 1px solid #26366060;
+  border-radius: 5px;
+  background: var(--ivory);
+  color: var(--ink);
+}
+.lemrix-site .faq-list details[open] summary > span { background: var(--sunlight); }
+
+/* A real archival slab takes the spotlight on the shop counter. */
+.shop-counter {
+  padding-block: clamp(46px, 7vw, 96px);
+  background: var(--midnight);
+  color: var(--ivory);
+}
+.shop-counter-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(34px, 7vw, 100px);
+}
+.counter-copy h1 {
+  max-width: 9ch;
+  margin: 0;
+  font-size: clamp(48px, 7.1vw, 102px);
+  line-height: .97;
+  letter-spacing: -.043em;
+}
+.counter-copy > p { color: #f2e9da; }
+.counter-whatnot { margin-left: 14px; }
+.counter-copy :focus-visible, .counter-card:focus-visible { outline-color: var(--sunlight); }
+.counter-display {
+  display: grid;
+  justify-self: end;
+  width: min(100%, 500px);
+  border: 2px solid #141b41;
+  border-radius: var(--frame-radius);
+  background: var(--ivory);
+  color: var(--ink);
+  box-shadow: 5px 6px 0 #10183b;
+}
+.counter-card {
+  display: block;
+  min-width: 0;
+  text-align: left;
+}
+.counter-card-photo {
+  display: grid;
+  place-items: center;
+  padding-block: clamp(20px, 3.5vw, 45px);
+  border-radius: calc(var(--frame-radius) - 2px) calc(var(--frame-radius) - 2px) 0 0;
+  background:
+    radial-gradient(ellipse at 50% 36%, #fff2c9 0, #ffd98e 38%, transparent 72%),
+    #edb766;
+  overflow: hidden;
+}
+.counter-card-photo img {
+  display: block;
+  width: auto;
+  height: clamp(186px, min(28vw, 38svh), 326px);
+  max-width: 86%;
+  object-fit: contain;
+  border: 5px solid var(--ivory);
+  border-radius: 5px;
+  box-shadow: 0 0 0 1px #3b264768, 6px 12px 19px #61423855;
+  rotate: -4deg;
+  transition: rotate .3s, translate .3s, box-shadow .3s;
+}
+.counter-card:hover img, .counter-card:focus-visible img {
+  rotate: 0deg;
+  translate: 0 -3px;
+  box-shadow: 0 0 0 1px #3b264768, 8px 16px 24px #61423855;
+}
+.counter-card-label, .counter-archive {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-inline: clamp(12px, 3vw, 21px);
+}
+.counter-card-label {
+  padding-block: 12px;
+  border-top: 2px solid var(--ink);
+}
+.counter-card-label b {
+  display: block;
+  font: 400 clamp(21px, 2.4vw, 31px) / 1.1 var(--display);
+}
+.counter-card-label small, .counter-archive > span { display: block; margin-top: 4px; font-size: 13px; }
+.counter-archive {
+  min-height: 53px;
+  border-top: 1px solid var(--line);
+  background: #ffedc8;
+  border-radius: 0 0 calc(var(--frame-radius) - 2px) calc(var(--frame-radius) - 2px);
+}
+.counter-archive > span { margin: 0; color: var(--muted); }
+.lemrix-site .counter-archive .text-link {
+  min-height: 44px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  text-align: right;
+}
+.counter-archive button:hover { text-decoration: underline; text-underline-offset: .25em; }
+.shop-page + .site-footer { border-top: 1px solid #fff5dd45; }
+.shop-page + .site-footer .section-tide { display: none; }
+
+/* The archive tabs sit in the edge of the folder. */
+.lemrix-site .card-hub {
+  border-color: var(--ink);
+  border-radius: var(--frame-radius);
+}
+.lemrix-site .card-hub-head {
+  background: var(--midnight);
+  color: var(--ivory);
+  border-bottom: 0;
+  gap: 12px;
+}
+.lemrix-site .hub-close {
+  color: var(--ivory);
+  width: 44px;
+  height: 44px;
+  border-radius: 7px;
+}
+.hub-close:hover { background: #fff5dd20; }
+.card-hub-head :focus-visible { outline-color: var(--sunlight); }
+.lemrix-site .hub-tabs { gap: clamp(3px, 1.1vw, 9px); justify-content: start; }
+.lemrix-site .hub-tabs button {
+  min-height: 44px;
+  padding: 6px clamp(8px, 2.1vw, 21px);
+  border: 1px solid #fff5dd46;
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  background: #fff5dd10;
+  color: var(--ivory);
+  font-weight: 500;
+}
+.lemrix-site .hub-tabs button[aria-selected="true"] {
+  border-color: var(--paper);
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 700;
+}
+.lemrix-site .hub-tabs button[aria-selected="true"]:focus-visible { outline-color: var(--ink); }
+.lemrix-site .hub-query {
+  min-height: 48px;
+  border-width: 1.5px;
+  border-radius: 7px;
+}
+.lemrix-site .hub-query:focus-within { outline: 2px solid #4c69a9; outline-offset: 1px; }
+.lemrix-site .hub-panel .archive-workspace {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.lemrix-site .archive-top { min-height: 42px; padding: 0; }
+.lemrix-site .archive-top .archive-title { font-size: 14px; }
+.lemrix-site .archive-top a { min-height: 44px; font-size: 13px; }
+.lemrix-site .archive-workspace .sort-button { min-height: 40px; }
+.lemrix-site .archive-workspace .catalogue-toolbar { padding: 8px 0 10px; }
+.lemrix-site .archive-workspace .filter { min-width: 44px; border-radius: 6px; }
+.lemrix-site .archive-workspace .filter.active { background: var(--ink); color: var(--ivory); }
+.lemrix-site .archive-workspace .product {
+  border: 1px solid #18235966;
+  border-radius: 8px;
+  box-shadow: 0 2px 0 #26366021;
+}
+.lemrix-site .archive-workspace .product .product-media { background: #eee1c9; }
+.lemrix-site .archive-workspace .product-info { min-height: 88px; }
+.lemrix-site .archive-workspace .product-save {
+  width: 44px;
+  height: 44px;
+  right: 6px;
+  bottom: 6px;
+  border-radius: 7px;
+}
+.lemrix-site .product-dialog { border-radius: var(--frame-radius); }
+.product-dialog .product-detail-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas: "media heading" "media copy";
+  grid-template-rows: 1fr auto;
+  align-items: stretch;
+}
+.detail-heading {
+  grid-area: heading;
+  align-self: end;
+  min-width: 0;
+  padding: clamp(22px, 3.4vw, 40px) clamp(20px, 3.5vw, 42px) 0;
+}
+.detail-heading h2 { margin: 0; padding-right: 35px; font-size: clamp(32px, 4.5vw, 51px); line-height: 1; }
+.detail-heading .detail-note { margin-top: 9px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.product-detail-layout .detail-media { grid-area: media; background: #eee1c9; }
+.product-detail-layout .detail-copy { grid-area: copy; padding-top: 0; }
+.product-detail-layout .detail-copy dl { margin-top: 15px; }
+.product-detail-layout .detail-actions { margin-top: 14px; }
+.lemrix-site .product-dialog .dialog-close { min-width: 44px; min-height: 44px; z-index: 2; }
+.lemrix-site .saved-dialog { border-radius: var(--frame-radius) 0 0 var(--frame-radius); }
+
+.lemrix-site .site-footer { padding-top: 54px; }
+.lemrix-site .footer-main { grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); }
+.lemrix-site .footer-brand { display: grid; align-items: start; gap: 12px; }
+.lemrix-site .footer-brand .brand-image { width: 66px; }
+.lemrix-site .footer-brand > p {
+  margin: 0;
+  font-size: clamp(30px, 4.2vw, 55px);
+  line-height: .99;
+  letter-spacing: -.03em;
+}
+.lemrix-site .footer-links { border-left: 1px solid #fff5dd42; padding: 0 0 0 clamp(18px, 3vw, 36px); }
+.lemrix-site .footer-links > div > span { font-size: 13px; letter-spacing: 0; }
+.lemrix-site .footer-links :is(a, p) { color: var(--ivory); }
+
+@media (max-height: 510px) and (min-width: 761px) {
+  .lemrix-site #the-club { --comic-width: min(27vw, max(124px, calc((100svh - var(--nav-height) - 142px) * .71))); }
+  .lemrix-site .collab-layout { row-gap: 8px; }
+  .comic-mat { padding-block: 12px; }
+  .comic-controls { min-height: 45px; }
+}
+
+@media (max-width: 920px) {
+  .lemrix-site .footer-main { grid-template-columns: 1fr; gap: 30px; }
+  .lemrix-site .footer-links { border-left: 0; border-top: 1px solid #fff5dd42; padding: 22px 0 0; }
+}
+
+@media (max-width: 760px) {
+  html:has(.lemrix-site) { --anchor-padding: 74px; }
+  .lemrix-site {
+    --section-pad: clamp(43px, 10vw, 68px);
+    --frame-radius: 13px;
+  }
+  .lemrix-site .site-header .brand-image { width: 51px; }
+  .lemrix-site .nav-actions { gap: 4px; }
+  .lemrix-site .nav-search { min-height: 44px; padding-inline: 10px; }
+  .lemrix-site .nav-world .mobile-menu {
+    position: absolute;
+    inset: 100% var(--gutter) auto auto;
+    width: min(320px, calc(100% - var(--gutter) * 2));
+    padding: 7px 16px;
+    border: 2px solid var(--ink);
+    border-radius: 0 0 10px 10px;
+    background: var(--ivory);
+    box-shadow: 3px 5px 0 #0d153a59;
+    color: var(--ink);
+  }
+  .lemrix-site .mobile-menu a { min-height: 48px; border-color: var(--line); font-size: 15px; }
+  .lemrix-site .mobile-menu a:last-child { border-bottom: 0; }
+  .lemrix-site .mobile-menu span { color: var(--ink); }
+  .lemrix-site .mobile-menu :focus-visible { outline-color: var(--ink); }
+
+  .lemrix-site #the-club {
+    --chapter-travel: clamp(92px, 14svh, 118px);
+    --comic-width: min(59vw, max(145px, calc((100svh - var(--nav-height) - 230px) * .71)), 252px);
+  }
+  .lemrix-site .collab-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    grid-template-areas: "heading" "comic" "follow";
+    justify-items: center;
+    gap: clamp(10px, 2.25svh, 20px);
+    padding-block: calc(var(--tide-height) + 12px) 15px;
+    text-align: center;
+  }
+  #club-title { max-width: none; align-self: center; font-size: clamp(29px, 8.6vw, 55px); }
+  .collab-display { width: min(100%, 378px); }
+  .comic-mat { padding-block: 17px; }
+  .comic-controls { min-height: 48px; grid-template-columns: 48px 1fr 48px; }
+  .lemrix-site .collab-follow { min-height: 40px; }
+
+  .breaks-inner, .trade-inner, .shop-counter-inner,
+  .lemrix-site .faq-section, .lemrix-site .lucky-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .breaks-inner, .trade-inner, .shop-counter-inner, .lemrix-site .faq-section { gap: 25px; }
+  .lemrix-site :is(.breaks-copy, .lucky-copy, .trade-copy, .counter-copy) > p { margin-block: 13px 18px; }
+  .lemrix-site .trade-illustration, .counter-display { justify-self: start; width: min(100%, 500px); }
+  .lucky-copy { padding: 24px; }
+  .lucky-copy h2 { max-width: none; }
+  .lucky-machine {
+    padding: 37px clamp(35px, 11vw, 66px) 20px;
+    border: 0;
+    border-top: 2px solid var(--ink);
+    border-radius: 0 0 calc(var(--frame-radius) - 2px) calc(var(--frame-radius) - 2px);
+  }
+  .lemrix-site .wheel-stage { width: min(100%, 308px); }
+  .lucky-mascot { right: -14%; }
+  .lemrix-site .trade-copy { grid-row: auto; }
+  .trade-section::before { display: none; }
+  .lemrix-site .trade-illustration { aspect-ratio: 1.46; background: radial-gradient(ellipse at 53% 56%, var(--ivory) 0 37%, transparent 70%); }
+  .trade-illustration img { width: 84%; }
+  .counter-copy h1 { max-width: 11ch; }
+  .counter-card-photo img { height: clamp(184px, 55vw, 265px); }
+  .lemrix-site .footer-brand { gap: 8px; }
+
+  .lemrix-site .hub-tabs button { font-size: clamp(11px, 3.6vw, 14px); }
+  .lemrix-site .hub-tabs { gap: 4px; }
+  .lemrix-site .archive-top .archive-title, .lemrix-site .archive-top a { font-size: 12px; }
+  .lemrix-site .archive-workspace .catalogue-toolbar { padding-block: 6px 9px; }
+  .lemrix-site .archive-workspace .filter { min-height: 44px; }
+  .lemrix-site .archive-workspace .product-ref { flex-wrap: wrap; gap: 1px 6px; }
+  .lemrix-site .product-dialog { width: min(480px, calc(100% - 24px)); }
+  .product-dialog .product-detail-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "heading" "media" "copy";
+    grid-template-rows: auto;
+  }
+  .detail-heading { padding: 19px 18px 14px; }
+  .product-detail-layout .detail-media { padding-block: 12px; }
+  .product-detail-layout .detail-media img { max-height: clamp(160px, 35svh, 268px); }
+  .product-detail-layout .detail-copy { padding: 8px 18px 20px; }
+  .product-detail-layout .detail-actions { margin-top: 8px; }
+}
+
+@media (max-width: 760px) and (max-height: 510px) and (orientation: landscape) {
+  .lemrix-site #the-club { --comic-width: min(27vw, max(105px, calc((100svh - var(--nav-height) - 128px) * .71))); }
+  .lemrix-site .collab-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "heading comic" "follow comic";
+    grid-template-rows: auto auto;
+    justify-items: start;
+    gap: 7px 26px;
+    text-align: left;
+  }
+  #club-title { align-self: end; max-width: 9ch; font-size: clamp(28px, 6vw, 48px); }
+  .comic-mat { padding-block: 12px; }
+  .comic-controls { min-height: 44px; }
+}
+
+@media (max-width: 380px) {
+  .lemrix-site .site-header { gap: 6px; }
+  .lemrix-site .site-header .brand-image { width: 46px; }
+  .counter-archive { gap: 6px; }
+  .counter-archive > span, .lemrix-site .counter-archive .text-link { font-size: 12px; }
+  .counter-whatnot { margin-left: 10px; font-size: 13px; }
+  .lemrix-site .hub-tabs button { padding-inline: 7px; }
+}
+
+.motion-paused .comic-progress::after,
+.motion-paused :is(.collector-primary, .counter-card-photo img) {
+  transition: none;
+}
+html[data-system-motion="reduced"] .comic-progress::after,
+html[data-system-motion="reduced"] :is(.collector-primary, .counter-card-photo img) {
+  transition: none !important;
+}

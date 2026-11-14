@@ -1,0 +1,67 @@
+/* Motion sits last in the cascade: one pace, clean interruption, native fallbacks. */
+:root{--motion-ease:cubic-bezier(.2,.75,.2,1)}
+html{scrollbar-gutter:stable;scroll-behavior:auto;scroll-padding-top:24px}
+html.lenis,html.lenis body{scroll-behavior:auto!important}
+.hero-copy .eyebrow,.hero-copy h1,.hero-description,.hero-actions{animation:arrive .8s both var(--motion-ease)}
+.hero-copy h1{animation-delay:.07s}.hero-description{animation-delay:.14s}.hero-actions{animation-delay:.21s}
+.official-scene-frame{animation:frame-arrive 1.1s .12s both var(--motion-ease)}
+.hero-stars span{animation:twinkle 9s ease-in-out infinite}.hero-stars span:nth-child(2){animation-delay:-2s}.hero-stars span:nth-child(3){animation-delay:-4s}
+.headline-star,.wheel-orbit-star,.theatre-star{animation:star-nod 8s ease-in-out infinite}.star-b{animation-delay:-3s}
+.motion-reveal{opacity:.86;translate:0 10px;transition:opacity .45s var(--motion-ease),translate .6s var(--motion-ease);transition-delay:var(--reveal-delay,0ms)}
+:is(.collab-art.story-gallery,.stream-print,.channel).motion-reveal{transition:opacity .45s var(--motion-ease) var(--reveal-delay,0ms),translate .6s var(--motion-ease) var(--reveal-delay,0ms),rotate .4s var(--motion-ease),box-shadow .4s var(--motion-ease),padding .25s var(--motion-ease)}
+.motion-reveal.is-visible{opacity:1;translate:0 0}
+/* Repeatable SVG geometry travels exactly two periods: no visible loop seam. */
+.rolling-waves{overflow:hidden;pointer-events:none}.hero .wave-bottom{height:40px;bottom:-1px}
+.wave-front{fill:var(--paper);animation:wave-flow 28s linear infinite;will-change:transform}
+.wave-back{fill:#7d8eae;opacity:.2;animation:wave-flow 43s linear infinite reverse;will-change:transform}.wave-back path{transform:translateY(-6px)}
+.wave-front.clock-driven,.wave-back.clock-driven{animation:none;will-change:auto}
+.section-tide{position:absolute;left:0;right:0;top:-28px;width:100%;height:36px;z-index:1}.section-tide .wave-front{fill:var(--ink);animation-duration:36s}
+.site-footer>.section-tide .wave-front{animation-duration:42s;animation-direction:reverse}.collab-section:before,.site-footer:before{display:none}
+/* Keep original artwork and letterforms intact; animate their framing. */
+.brand-lockup .brand-image{transition:transform .35s var(--motion-ease)}
+.button{transition:transform .25s var(--motion-ease),background .25s,box-shadow .25s}.button span{transition:transform .25s var(--motion-ease)}
+.product-image-button{overflow:hidden}.product-image-button img{transition:transform .55s var(--motion-ease)}
+.product-image-button:after{content:'';position:absolute;inset:-20% -80%;background:linear-gradient(110deg,transparent 40%,#ffffff42 49%,transparent 58%);transform:translateX(-65%);opacity:0;pointer-events:none}
+.product-save{transition:background .2s,border-color .2s,transform .2s}.product-save:active{transform:scale(.9)}.product-save.saved svg{animation:none}
+.trade-illustration .binder-front{transition:transform .6s var(--motion-ease)}.trade-card{animation:loose-card 8s ease-in-out infinite}
+.faq-list details[open]>p{animation:arrive .28s var(--motion-ease)}
+dialog[open],.saved-dialog[open]{animation:none}
+dialog::backdrop{animation:backdrop-arrive .3s both ease-out}dialog[data-closing]::backdrop{animation:none;opacity:0;transition:opacity .18s ease-out}dialog[data-closing]{pointer-events:none}
+.story-image img{backface-visibility:hidden}.story-gallery[aria-busy=true] .story-counter{opacity:.5;transition:opacity .15s}.story-image{touch-action:pan-y pinch-zoom}
+.story-status{font-size:8px;text-align:center;min-height:0;line-height:1.5}.story-status:empty{display:none}
+.wheel-stage.is-spinning .wheel-pointer{animation:pointer-tick .2s ease-in-out infinite;transform-origin:50% 0}.wheel-stage.is-spinning .prize-wheel{will-change:transform}
+.moment-section{background:#17214d!important}.moment-copy h2{font-size:48px!important;line-height:1.15!important}.moment-video{border-radius:18px}.moment-source{border-radius:0}
+#motion-toggle{font-size:inherit;letter-spacing:inherit;text-decoration:underline;text-underline-offset:4px}
+@media(hover:hover) and (pointer:fine){
+ .brand-lockup:hover .brand-image{transform:rotate(-4deg) translateY(-2px)}.button:hover span{transform:translate(3px,-2px)}
+ .product-image-button:hover:after,.product-image-button:focus-visible:after{animation:card-glint .95s ease-out both}
+ .trade-illustration:hover .binder-front{transform:rotate(4deg) translate(40px,-6px)}
+}
+@media(hover:none){.button:hover{transform:none;box-shadow:none}.button:hover span{transform:none}.product-image-button:hover img{transform:none}.stream-print:hover{rotate:var(--rest-rotate)}.collab-art.story-gallery:hover{rotate:-3deg}}
+@media(max-width:760px){.hero .wave-bottom{height:29px}.section-tide{top:-21px;height:28px}}
+/* Offscreen scenes and background tabs don't spend frames on decorative loops. */
+.motion-scene-idle *,.motion-scene-idle *:before,.motion-scene-idle *:after,.page-hidden *,.page-hidden *:before,.page-hidden *:after{animation-play-state:paused!important}
+.motion-scene-idle .wave-front,.motion-scene-idle .wave-back{will-change:auto}
+@keyframes arrive{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+@keyframes frame-arrive{from{opacity:0;transform:translateY(20px) scale(.975)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes twinkle{0%,100%{opacity:.45;transform:scale(.85) rotate(-8deg)}50%{opacity:1;transform:scale(1.05) rotate(5deg)}}
+@keyframes star-nod{0%,100%{rotate:-6deg}50%{rotate:6deg}}
+@keyframes wave-flow{to{transform:translateX(-1440px)}}
+@keyframes card-glint{0%{transform:translateX(-65%);opacity:0}20%{opacity:.65}100%{transform:translateX(65%);opacity:0}}
+@keyframes loose-card{0%,100%{transform:rotate(18deg) translateY(0)}50%{transform:rotate(14deg) translateY(-7px)}}
+@keyframes backdrop-arrive{from{opacity:0}to{opacity:1}}
+@keyframes pointer-tick{0%,100%{transform:translateX(-50%) rotate(0deg)}45%{transform:translateX(-50%) rotate(-9deg)}}
+
+.motion-paused *,.motion-paused *:before,.motion-paused *:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+.motion-paused .motion-reveal{opacity:1;translate:none;transform:none}.motion-paused [data-parallax]{translate:none!important}.motion-paused .print-image img{translate:0 -15px!important}
+.motion-paused .wave-front,.motion-paused .wave-back,.motion-paused .prize-wheel{will-change:auto}
+
+.print-one{--rest-rotate:-5deg}.print-two{--rest-rotate:2deg}.print-three{--rest-rotate:5deg}
+@media(max-width:760px){.print-one{--rest-rotate:-4deg}.print-three{--rest-rotate:4deg}}
+@media(max-width:480px){.print-three{--rest-rotate:-3deg}}
+
+@media(max-width:760px){.nav-world{position:relative;z-index:8}.nav-world .mobile-menu{position:absolute;left:0;right:0;top:100%;z-index:9;border-bottom:1px solid #f8e8c833;box-shadow:0 22px 30px #111a4026;border-radius:0 0 18px 18px}}
+
+/* Two chapters move across a viewport while the surrounding page stays in flow. */
+.product-grid.is-docking .product-media{transform-origin:0 0;will-change:transform}
+.product-grid.is-docking .product-info{opacity:0}

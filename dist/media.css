@@ -1,0 +1,6 @@
+.moment-section{padding-top:90px;padding-bottom:90px;background:var(--ink);color:var(--paper)}
+.moment-section[hidden]{display:none}.moment-inner{display:grid;grid-template-columns:1.5fr 1fr;gap:60px;align-items:center}
+.moment-video{border:1px solid #f5f3ec40;padding:14px;background:repeating-linear-gradient(90deg,#f5f3ec25 0 13px,transparent 13px 30px) top/100% 5px no-repeat}
+.moment-video video{width:100%;aspect-ratio:16/9;display:block;background:#111;object-fit:contain}
+.moment-credit{font-size:9px;color:#c5c5b8;margin-top:12px}.moment-copy h2{font-size:72px;line-height:1.02;margin:20px 0}.moment-description{font-size:13px;margin-bottom:24px;color:#d9dace}.moment-source{display:inline-block;border-bottom:1px solid currentColor;font-size:12px}
+@media(max-width:860px){.moment-inner{grid-template-columns:1fr;gap:30px}.moment-copy h2{font-size:62px}.moment-section{padding-top:50px;padding-bottom:50px}}

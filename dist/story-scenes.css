@@ -1,0 +1,51 @@
+.hero-entrance-pending h1 { visibility: hidden; }
+.mascot-runway {
+  position: absolute;
+  bottom: max(5px, env(safe-area-inset-bottom));
+  z-index: 0;
+  --runner-width: clamp(33px, 4.1vw, 54px);
+}
+.mascot-runway::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  border-bottom: 1px solid #1823591c;
+}
+.collab-layout { position: relative; z-index: 1; }
+
+.tv-show {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  margin: 0;
+}
+.tv-stage {
+  position: relative;
+  aspect-ratio: 1200 / 850;
+  isolation: isolate;
+  background: radial-gradient(ellipse at 45% 42%, #354b7d, transparent 72%);
+}
+.tv-stage :is(.tv-poster, canvas) {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.tv-stage:not([data-playback="frames"]) canvas,
+.tv-stage[data-playback="frames"] .tv-poster { visibility: hidden; }
+.tv-show figcaption { margin-top: 12px; }
+.tv-show figcaption a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: .24em;
+}
+@media (max-width: 760px) {
+  .tv-show { grid-row: auto; grid-column: auto; }
+}

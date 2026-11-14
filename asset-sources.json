@@ -1,0 +1,69 @@
+{
+  "retrieved": "2026-11-04",
+  "selection_notes": "All images are from Lemrix public storefront or eBay seller lemrix. No unrelated stock imagery or generated imagery. Archived product photographs do not assert current stock.",
+  "assets": [
+    {
+      "filename": "assets/pikachu-15th-psa10.webp",
+      "source_page": "https://www.ebay.com.au/itm/307106178199",
+      "source_url": "https://i.ebayimg.com/images/g/TmUAAeSw4oNqccd2/s-l1600.webp",
+      "subject": "Pikachu 15th Anniversary Promo 229/BW-P, Japanese, PSA 10",
+      "width": 948,
+      "height": 1600,
+      "notes": "2013; ended listing, archive treatment only. Tight image suitable as hero."
+    },
+    {
+      "filename": "assets/pikachu-ex-psa10.webp",
+      "source_page": "https://www.ebay.com.au/itm/307093879978",
+      "source_url": "https://i.ebayimg.com/images/g/SYgAAeSwzDRqaheC/s-l1600.webp",
+      "subject": "Pikachu EX 094/087 CP6 20th Anniversary, Japanese, PSA 10",
+      "width": 1600,
+      "height": 1600,
+      "notes": "2016; ended listing, archive treatment. Square carpet background less suitable than tight slabs."
+    },
+    {
+      "filename": "assets/giratina-v-psa10.webp",
+      "source_page": "https://www.ebay.com.au/itm/307103358282",
+      "source_url": "https://i.ebayimg.com/images/g/IdYAAeSwcGlqcCU-/s-l1600.webp",
+      "subject": "Giratina V 111/100 Lost Abyss, Japanese, PSA 10",
+      "width": 952,
+      "height": 1600,
+      "notes": "2022; Lemrix seller confirmed. Treat as curated archive; availability not independently live-synced."
+    },
+    {
+      "filename": "assets/lugia-v-psa10.webp",
+      "source_page": "https://www.ebay.com.au/itm/307103360465",
+      "source_url": "https://i.ebayimg.com/images/g/~n8AAeSwn2JqcCX5/s-l1600.webp",
+      "subject": "Lugia V 110/098 Paradigm Trigger, Japanese, PSA 10",
+      "width": 952,
+      "height": 1600,
+      "notes": "Lemrix seller confirmed. Treat as curated archive; availability not independently live-synced."
+    },
+    {
+      "filename": "assets/gengar-vmax-psa10.webp",
+      "source_page": "https://www.ebay.com.au/itm/307103362825",
+      "source_url": "https://i.ebayimg.com/images/g/yc8AAeSw8KJqcCZ-/s-l1600.webp",
+      "subject": "Gengar VMAX 020/019 VMAX High Class Deck, Japanese, PSA 10",
+      "width": 946,
+      "height": 1600,
+      "notes": "2021; Lemrix seller confirmed. Treat as curated archive; availability not independently live-synced."
+    },
+    {
+      "filename": "assets/lemrix-logo.jpg",
+      "source_page": "https://lemrix.mypisell.com/",
+      "source_url": "https://file.mypisell.com/pisel/image/8011/e592483e1bed3bf5bb0924505b56735d2024_10_10_11_39_39_637_08538540974__593_593__.jpeg",
+      "subject": "Actual Lemrix Wobbuffet logo",
+      "width": 593,
+      "height": 593,
+      "notes": "Blue circular Wobbuffet illustration with LEMRIX lettering, from public storefront."
+    },
+    {
+      "filename": "assets/lemrix-pack-wall.jpg",
+      "source_page": "https://lemrix.mypisell.com/",
+      "source_url": "https://file.mypisell.com/pisel/image/8011/327f01c982a34c59d941c2b05a8542f72024_10_14_12_55_27_950_06938932510__870_1088__.jpeg",
+      "subject": "Lemrix Pok\u00e9mon booster pack collage",
+      "width": 870,
+      "height": 1088,
+      "notes": "Only one genuine sealed-product photo located; all category pictures otherwise generic jewellery placeholders and excluded."
+    }
+  ]
+}

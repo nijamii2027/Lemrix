@@ -1,0 +1,482 @@
+.lemrix-site .nav-world {
+ background:var(--ink);
+ backdrop-filter:none;
+ color:var(--paper);
+ box-shadow:inset 0 -1px #faf2df24;
+}
+.lemrix-site .nav-world .mobile-menu {
+ background:var(--ink);
+ color:var(--paper);
+ border-color:#faf2df24;
+}
+.lemrix-site .mobile-menu a{border-color:#faf2df24}
+.lemrix-site .mobile-menu span{color:var(--butter)}
+.nav-search {
+ display:inline-flex;
+ align-items:center;
+ gap:8px;
+ min-height:40px;
+ padding:0 13px;
+ border:1px solid var(--ink);
+ border-radius:100px;
+ font-size:13px;
+ font-weight:700;
+ line-height:1;
+ white-space:nowrap;
+}
+.nav-search svg{width:17px;height:17px}
+.nav-search:hover{background:var(--ink);color:var(--paper)}
+.opening-home .nav-search{border-color:var(--butter);background:var(--butter);color:var(--ink)}
+.opening-home .nav-search:hover{background:#fff7e5}
+.lemrix-site .nav-actions .save-total{color:var(--ink)}
+
+.moon-hero {
+ position:relative;
+ isolation:isolate;
+ overflow:hidden;
+ background:radial-gradient(ellipse at 51% 46%,#233064 0,transparent 57%),var(--ink);
+}
+.moon-stage {
+ --stage-height:max(280px,calc(100svh - var(--nav-height)));
+ --composition-height:min(var(--stage-height),860px);
+ --composition-inset:calc((var(--stage-height) - var(--composition-height)) * .5);
+ --shop-width:min(63vw,calc(var(--composition-height) * .96),820px);
+ --shop-height:calc(var(--shop-width) * .7103);
+ --title-size:clamp(43px,min(12.1vw,calc(var(--composition-height) * .194)),160px);
+ --pack-size:calc(var(--title-size) * 1.12);
+ --title-top:calc(var(--composition-inset) + var(--composition-height) * .075);
+ --shop-top:calc(var(--composition-inset) + var(--composition-height) * .14);
+ position:relative;
+ width:100%;
+ height:var(--stage-height);
+}
+.moon-stage h1{font-size:inherit;line-height:.88;letter-spacing:-.035em}
+.moon-one-more,.moon-pack {
+ position:absolute;
+ left:50%;
+ width:max-content;
+ max-width:100%;
+ translate:-50% var(--shore-y,0px);
+ white-space:nowrap;
+}
+.moon-one-more {
+ z-index:1;
+ top:var(--title-top);
+ font-size:var(--title-size);
+ color:var(--paper);
+}
+.hero-grip{display:inline-block}
+.moon-diorama {
+ position:absolute;
+ z-index:2;
+ left:50%;
+ top:var(--shop-top);
+ width:var(--shop-width);
+ margin:0;
+ translate:-50% var(--shore-y,0px);
+ pointer-events:none;
+}
+.moon-diorama img{display:block;width:100%;height:auto}
+.moon-diorama{height:var(--shop-height)}
+.moon-diorama canvas{position:absolute;inset:0;width:100%;height:100%}
+.moon-diorama.has-live-scene>img{visibility:hidden}
+#hero-hands{position:absolute;inset:0;z-index:6;width:100%;height:100%;pointer-events:none}
+.has-live-hands .hero-hand{display:none}
+.opening-clip-defs{position:absolute;pointer-events:none}
+.moon-pack {
+ z-index:3;
+ top:calc(var(--shop-top) + var(--shop-height) - var(--pack-size) * .78);
+ display:flex;
+ font-size:var(--pack-size);
+ color:var(--butter);
+ text-shadow:0 2px 0 #f9edcf33,0 8px 7px #10183f75,0 19px 28px #10183f68;
+}
+.moon-letter{display:block;transform-origin:50% 77%}
+.moon-hero .wave-bottom{z-index:8;height:clamp(36px,5.7vw,74px);bottom:-1px}
+
+.hero-hand {
+ position:absolute;
+ z-index:6;
+ top:0;
+ left:0;
+ width:0;
+ height:0;
+ visibility:hidden;
+ pointer-events:none;
+}
+.hand-art {
+ position:absolute;
+ top:0;
+ left:0;
+ width:clamp(144px,21vw,290px);
+ height:auto;
+ overflow:visible;
+ transform-origin:87.8% 53.6%;
+ transform:translate(-87.8%,-53.6%) rotate(var(--hand-turn));
+ filter:drop-shadow(0 11px 12px #0b143d45);
+}
+.hand-lemrix{--hand-turn:23deg}
+.hand-cookd{--hand-turn:200deg}
+.live-feature .moment-section{grid-column:1/-1}
+
+/* The paper starts at the same line as the hero's moving cream wave. */
+.lemrix-site #the-club {
+ --tide-height:clamp(40px,5.7vw,74px);
+ --chapter-height:max(280px,calc(100svh - var(--nav-height) + var(--tide-height)));
+ --chapter-travel:clamp(250px,42svh,420px);
+ --comic-width:min(29vw,calc((var(--chapter-height) - var(--tide-height) - 120px) * .71),350px);
+ position:relative;
+ z-index:5;
+ margin-top:calc(-1 * var(--tide-height));
+ padding:0;
+ background:transparent;
+}
+#the-club.is-scroll-comic{height:calc(var(--chapter-height) + var(--chapter-travel) * 8)}
+.collab-viewport {
+ position:relative;
+ min-height:var(--chapter-height);
+ overflow:clip;
+ clip-path:url(#collab-tide-clip);
+ background:var(--paper);
+}
+.is-scroll-comic .collab-viewport{position:sticky;top:calc(var(--nav-height) - var(--tide-height))}
+.lemrix-site .collab-layout{max-width:1150px}
+.collab-layout {
+ display:grid;
+ min-height:calc(var(--chapter-height) - var(--tide-height));
+ grid-template-columns:1.1fr 1fr;
+ grid-template-areas:'heading comic' 'follow comic';
+ grid-template-rows:auto auto;
+ align-content:center;
+ align-items:center;
+ justify-items:start;
+ gap:28px 70px;
+ text-align:left;
+ padding-block:calc(var(--tide-height) + clamp(20px,4svh,40px)) clamp(20px,4svh,40px);
+}
+#club-title {
+ grid-area:heading;
+ margin:0;
+ max-width:8.7ch;
+ align-self:end;
+ font-size:clamp(46px,min(6.5vw,10svh),86px);
+ line-height:1.02;
+ letter-spacing:-.035em;
+}
+.collab-follow{grid-area:follow;align-self:start}
+.collab-follow svg,.hub-panel .window-caption svg{display:block;width:1em;height:1em}
+.comic-card-slot {
+ grid-area:comic;
+ position:relative;
+ justify-self:center;
+ width:var(--comic-width);
+ perspective:1120px;
+}
+.comic-card-slot::after {
+ content:'';
+ position:absolute;
+ z-index:0;
+ bottom:-19px;
+ left:8%;
+ right:8%;
+ height:12px;
+ border-radius:50%;
+ background:#382b4150;
+ filter:blur(11px);
+ transform:scaleX(var(--shadow-width,1));
+ pointer-events:none;
+}
+.comic-card {
+ position:relative;
+ z-index:1;
+ display:block;
+ width:100%;
+ aspect-ratio:419/590;
+ color:var(--ink);
+ border-radius:5.5%/4%;
+ perspective:1120px;
+ touch-action:manipulation;
+}
+.comic-card:focus-visible{outline-offset:7px}
+.comic-tilt,.comic-rotor {
+ position:absolute;
+ inset:0;
+ display:block;
+ transform-style:preserve-3d;
+}
+.comic-tilt{transform:rotateX(5deg) rotateZ(-5deg)}
+.comic-card.is-flipping .comic-rotor::before,.comic-card.is-flipping .comic-rotor::after {
+ content:'';
+ position:absolute;
+ inset-block:2.5%;
+ width:2.8px;
+ border-radius:2px;
+ background:linear-gradient(90deg,#1a2859,#e8cc78 75%,#c7a050);
+ transform:rotateY(90deg);
+}
+.comic-rotor::before{left:-1.4px}
+.comic-rotor::after{right:-1.4px}
+.comic-face {
+ position:absolute;
+ inset:0;
+ display:block;
+ overflow:hidden;
+ border-radius:5.5%/4%;
+ backface-visibility:hidden;
+ -webkit-backface-visibility:hidden;
+ box-shadow:0 0 0 1px #2a29464a,0 2px 0 #af904e,0 18px 42px #34274a36;
+}
+.comic-front{background:#f9d862}
+.comic-back{visibility:hidden;transform:rotateY(180deg) translateZ(1.4px);background:#182359}
+.comic-card.is-flipping .comic-front{transform:translateZ(1.4px)}
+.comic-card.is-flipping .comic-back{visibility:visible}
+.comic-face img{width:100%;height:100%;display:block}
+.comic-template,.comic-cover-art{position:absolute;inset:0;object-fit:fill}
+.comic-cover,.comic-page {
+ position:absolute;
+ inset:1.8% 1.8% 1.7%;
+ display:block;
+ overflow:hidden;
+ border-radius:3.6%/2.6%;
+}
+.comic-cover[hidden],.comic-page[hidden]{display:none}
+.comic-cover{color:#fff4d9;background:#212b58;text-align:left;container-type:inline-size}
+.comic-cover .comic-cover-art{object-fit:cover}
+.comic-cover::after {
+ content:'';
+ position:absolute;
+ z-index:1;
+ inset:0;
+ background:linear-gradient(180deg,#101a3ddb,transparent 23%,transparent 59%,#131c46e8 86%);
+ pointer-events:none;
+}
+.comic-front::after {
+ content:'';
+ position:absolute;
+ z-index:4;
+ inset:0;
+ opacity:var(--foil-strength,.16);
+ background:linear-gradient(var(--foil-angle,112deg),transparent 23%,#ffe9926a 37%,#fff9e15c 48%,#6fbbef33 57%,transparent 74%);
+ mix-blend-mode:screen;
+ pointer-events:none;
+}
+.comic-name,.comic-cover-copy,.comic-edition{position:absolute;left:5%;right:5%;z-index:2}
+.comic-name{top:5%;display:flex;align-items:center;gap:5px;font-size:clamp(11px,6.8cqw,27px);letter-spacing:-.045em}
+.comic-name strong{white-space:nowrap}
+.comic-basic {
+ padding:2px 5px 1px;
+ font-size:.47em;
+ letter-spacing:.04em;
+ line-height:1.35;
+ font-weight:700;
+ border:1px solid #8b90a6;
+ border-radius:4px 4px 9px 4px;
+ color:#172447;
+ background:linear-gradient(#fff,#c8cfde 50%,#f6f7fa);
+}
+.comic-emblem{margin-left:auto;color:#ffdd82}
+.comic-cover-copy{bottom:10.2%;display:grid;gap:.06em;text-shadow:0 1px 7px #101736;font-size:clamp(13px,7.5cqw,30px);line-height:1.05}
+.comic-cover-copy small{font-size:.53em;line-height:1.25}
+.comic-edition {
+ bottom:3%;
+ display:flex;
+ justify-content:space-between;
+ align-items:center;
+ gap:6px;
+ padding-top:2%;
+ border-top:1px solid currentColor;
+ font-size:clamp(5px,2.35cqw,10px);
+ line-height:1.3;
+ font-weight:700;
+ letter-spacing:.11em;
+}
+.comic-page{background:#f8edcf;container-type:inline-size}
+.comic-page-name {
+ position:absolute;
+ top:5%;
+ left:5%;
+ right:5%;
+ display:grid;
+ gap:.15em;
+ text-align:left;
+ font-size:clamp(10px,6.7cqw,27px);
+ font-weight:700;
+ line-height:1.07;
+}
+.comic-page-name small{font-size:.48em;line-height:1.4}
+.comic-page #comic-image {
+ position:absolute;
+ top:17%;
+ left:4%;
+ width:92%;
+ height:auto;
+ aspect-ratio:1;
+ object-fit:contain;
+ border:1px solid #1823595c;
+ border-radius:3px;
+}
+.comic-caption {
+ position:absolute;
+ bottom:10.7%;
+ left:5%;
+ right:5%;
+ font-family:var(--display);
+ font-size:clamp(10px,4.4cqw,18px);
+ line-height:1.22;
+}
+.comic-back img{object-fit:fill}
+@media(max-width:760px) and (min-height:480px) {
+ .moon-stage {
+  --stage-height:max(368px,calc(100svh - var(--nav-height)));
+  --shop-width:min(94vw,600px);
+  --title-size:clamp(43px,16.4vw,100px);
+  --shop-top:calc((var(--stage-height) - var(--shop-height)) * .45 - var(--title-size) * .16);
+  --title-top:calc(var(--shop-top) - var(--title-size) * .23);
+ }
+ .lemrix-site #the-club{--comic-width:min(76vw,calc((var(--chapter-height) - var(--tide-height) - 190px) * .71),310px)}
+ .collab-layout {
+  grid-template-columns:1fr;
+  grid-template-areas:'heading' 'comic' 'follow';
+  grid-template-rows:auto auto auto;
+  justify-items:center;
+  row-gap:clamp(14px,3.2svh,26px);
+  text-align:center;
+  padding-block:calc(var(--tide-height) + 14px) 18px;
+ }
+ #club-title{max-width:none;align-self:center;font-size:clamp(30px,8.4vw,52px);line-height:1.04}
+ #club-title br{display:none}
+}
+@media(max-height:479px) {
+ .moon-stage{--title-size:clamp(36px,calc(var(--stage-height) * .204),82px)}
+ .lemrix-site #the-club{--comic-width:min(38vw,calc((var(--chapter-height) - var(--tide-height) - 68px) * .71),290px)}
+ .collab-layout{
+  grid-template-columns:1fr 1fr;
+  grid-template-areas:'heading comic' 'follow comic';
+  grid-template-rows:auto auto;
+  justify-items:start;
+  align-content:center;
+  gap:12px 30px;
+  text-align:left;
+  padding-block:calc(var(--tide-height) + 10px) 12px;
+ }
+ #club-title{align-self:end}
+ #club-title{max-width:9ch}
+ .collab-follow{align-self:start}
+ #club-title{font-size:clamp(29px,7vw,59px)}
+}
+
+.lemrix-site .card-hub {
+ width:min(990px,calc(100% - 36px));
+ max-width:none;
+ max-height:calc(100dvh - 38px);
+ margin:auto;
+ padding:0;
+ color:var(--ink);
+ border:1.5px solid var(--ink);
+ border-radius:18px;
+ background:var(--paper);
+ overscroll-behavior:contain;
+}
+.card-hub-head {
+ position:sticky;
+ top:0;
+ z-index:5;
+ display:grid;
+ grid-template-columns:minmax(0,1fr) auto;
+ gap:15px 16px;
+ padding:20px 23px 0;
+ border-bottom:1px solid var(--line);
+ background:var(--paper);
+}
+.card-hub-head h2{align-self:center;font-size:clamp(29px,4vw,43px)}
+.card-hub-head .hub-close{align-self:start}
+.hub-tabs {
+ grid-column:1/-1;
+ display:flex;
+ align-items:center;
+ gap:18px;
+}
+.hub-tabs button {
+ min-height:44px;
+ padding:0 2px;
+ border-bottom:3px solid transparent;
+ font-size:13px;
+ font-weight:500;
+ white-space:nowrap;
+}
+.hub-tabs button[aria-selected="true"]{border-color:var(--ink);font-weight:700}
+.hub-tabs button:focus-visible{outline-offset:-2px;border-radius:3px}
+.hub-panel{padding:20px 23px 23px}
+.hub-query {
+ display:flex;
+ align-items:center;
+ gap:11px;
+ margin:0 0 15px;
+ padding:0 15px;
+ border:1px solid var(--ink);
+ border-radius:50px;
+ background:var(--cream);
+}
+.hub-query:focus-within{outline:2px solid var(--ink);outline-offset:3px}
+.hub-query svg{width:18px;height:18px;flex:none;stroke:currentColor;stroke-width:1.65}
+.hub-query input {
+ min-width:0;
+ width:100%;
+ height:47px;
+ padding:0;
+ color:var(--ink);
+ border:0;
+ background:none;
+ font-size:16px;
+}
+.hub-query input:focus-visible{outline:none}
+.hub-panel .archive-note{margin:12px 0 0;font-size:11px}
+.hub-panel .opening-window{padding:14px 12px 12px}
+.hub-panel .window-picture{height:clamp(120px,22vw,238px)}
+.hub-panel .window-duo {
+ grid-template-columns:repeat(2,minmax(0,1fr));
+ padding:clamp(7px,1.7vw,20px) clamp(4px,1.25vw,15px);
+ background:
+  radial-gradient(ellipse at 23% 67%,#efbf755c,transparent 50%),
+  radial-gradient(ellipse at 77% 63%,#82c9de49,transparent 50%),
+  var(--ink);
+}
+.hub-panel .window-collab .window-duo img {
+ position:static;
+ min-height:0;
+ object-position:center bottom;
+ filter:drop-shadow(0 6px 8px #0e184977);
+}
+.hub-panel .keepsake-feature {
+ margin-top:15px;
+ padding:clamp(18px,3vw,32px);
+ border-radius:var(--panel-radius);
+}
+.hub-panel .keepsake-feature-inner{gap:24px}
+.lemrix-site .hub-panel .keepsake-feature-copy h2{font-size:clamp(33px,5vw,55px)}
+.hub-panel .keepsake-feature .hero-collectible{width:min(270px,80%)}
+.lemrix-site .hub-panel .kitchen-section{padding:0}
+.lemrix-site .hub-panel .kitchen-composition{gap:clamp(16px,4vw,48px)}
+.lemrix-site .hub-panel .kitchen-copy h2{font-size:clamp(33px,5vw,54px)}
+
+@media(max-width:760px) {
+ .nav-search{min-height:39px;font-size:12px;padding-inline:11px;gap:6px}
+ .nav-search svg{width:15px;height:15px}
+ .lemrix-site .card-hub {
+  width:calc(100% - 18px);
+  max-height:calc(100dvh - 20px);
+  border-radius:14px;
+ }
+ .card-hub-head{padding:12px 13px 0;gap:9px}
+ .hub-tabs{justify-content:space-between;gap:7px}
+ .hub-tabs button{font-size:12px}
+ .hub-panel{padding:13px}
+ .hub-panel .archive-top{gap:7px}
+ .hub-panel .opening-window{padding:9px 7px 7px}
+ .hub-panel .window-picture{height:clamp(100px,37vw,206px)}
+ .hub-panel .keepsake-feature .hero-collectible{width:min(240px,85%)}
+ .hub-panel .kitchen-copy>p:last-child{margin-top:8px}
+}
+@media(max-width:350px) {
+ .hub-tabs button{font-size:11px}
+}

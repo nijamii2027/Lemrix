@@ -1,0 +1,107 @@
+[
+  {
+    "id": "LMX-009",
+    "file": "/assets/editorial/pack-wall.jpg",
+    "sources": [
+      {
+        "source_page": "https://lemrix.mypisell.com/",
+        "asset_url": "https://file.mypisell.com/pisel/image/8011/327f01c982a34c59d941c2b05a8542f72024_10_14_12_55_27_950_06938932510__870_1088__.jpeg",
+        "title": "Lemrix Pok\u00e9mon booster pack collage",
+        "picture": null,
+        "role": "Store artwork"
+      }
+    ],
+    "role": "Store artwork"
+  },
+  {
+    "id": "LMX-013",
+    "file": "/assets/editorial/stream-rayquaza.webp",
+    "sources": [
+      {
+        "source_page": "https://www.whatnot.com/clip/b9c85b93-b2f4-46e3-b8d6-65d38eb58631",
+        "asset_url": "https://s3ntry.whatnot.com/whatnot-klippy/dea11c06-12db-47b1-9545-43fadfd94e4f/clips/b9c85b93-b2f4-46e3-b8d6-65d38eb58631.webp",
+        "title": "$1 singles XY ERA ",
+        "picture": null,
+        "role": "Clip poster"
+      }
+    ],
+    "role": "Clip poster"
+  },
+  {
+    "id": "LMX-015",
+    "file": "/assets/editorial/stream-charizard.webp",
+    "sources": [
+      {
+        "source_page": "https://www.whatnot.com/clip/c5465542-4dd0-48d5-8772-88064aa820f7",
+        "asset_url": "https://s3ntry.whatnot.com/whatnot-klippy/a4481aab-8744-4a09-a048-a7e0d675d486/clips/1761741649-1761741709.webp",
+        "title": "Energy break + bbs!!",
+        "picture": null,
+        "role": "Clip poster"
+      }
+    ],
+    "role": "Clip poster"
+  },
+  {
+    "id": "LMX-030",
+    "file": "/assets/editorial/giratina-back.webp",
+    "sources": [
+      {
+        "source_page": "https://www.ebay.com.au/itm/307103358282",
+        "asset_url": "https://i.ebayimg.com/images/g/wgEAAeSwNKlqcCVH/s-l1600.webp",
+        "title": "PSA 10 Giratina V 111/100 Lost Abyss Japanese POKEMON | eBay Australia",
+        "picture": 2,
+        "role": "Product photo"
+      }
+    ],
+    "role": "Product photo"
+  },
+  {
+    "id": "LMX-032",
+    "file": "/assets/editorial/lugia-back.webp",
+    "sources": [
+      {
+        "source_page": "https://www.ebay.com.au/itm/307103360465",
+        "asset_url": "https://i.ebayimg.com/images/g/OfMAAeSwfCxqcCX~/s-l1600.webp",
+        "title": "PSA 10 Lugia V 110/098 Paradigm Trigger S12 Alternate Art Japanese POKEMON | eBay Australia",
+        "picture": 2,
+        "role": "Product photo"
+      }
+    ],
+    "role": "Product photo"
+  },
+  {
+    "id": "LMX-128",
+    "file": "/assets/editorial/pikachu-back.webp",
+    "sources": [
+      {
+        "source_page": "https://www.ebay.com.au/itm/307106178199",
+        "asset_url": "https://i.ebayimg.com/images/g/GX8AAeSw03hqccd7/s-l1600.webp",
+        "title": "Pikachu 15th Anniversary Promo 229 BW-P Japanese PSA 10",
+        "picture": 2,
+        "role": "Archived product photo"
+      }
+    ],
+    "role": "Archived product photo"
+  },
+  {
+    "id": "LMX-TV-001",
+    "file": "/assets/scenes/lemrix-highlights.mp4",
+    "sources": [
+      {
+        "source_page": "https://www.whatnot.com/clip/b9c85b93-b2f4-46e3-b8d6-65d38eb58631",
+        "title": "$1 singles XY ERA",
+        "start_seconds": 11.4,
+        "duration_seconds": 2,
+        "role": "Public Lemrix Whatnot stream clip"
+      },
+      {
+        "source_page": "https://www.whatnot.com/clip/c5465542-4dd0-48d5-8772-88064aa820f7",
+        "title": "Energy break + bbs!!",
+        "start_seconds": 3.2,
+        "duration_seconds": 2,
+        "role": "Public Lemrix Whatnot stream clip"
+      }
+    ],
+    "role": "Silent four-second TV loop"
+  }
+]
