@@ -1,0 +1,237 @@
+
+/*
+ * LEMRIX — Experience polish, November 2026
+ * Live enhancement layer. Original animation, storytelling and mascot assets remain intact.
+ * Performance goal: transforms/opacity for interactive changes; no perpetual new animation loops.
+ */
+:root {
+  --lab-gold: #f6cd73;
+  --lab-ease: cubic-bezier(.2,.8,.18,1);
+  --lab-outline: #f4c963;
+}
+html { text-size-adjust: 100%; }
+.lemrix-site :is(#club-title,#hangout-title,#lucky-title,#trade-title,#faq-title,#shop-title,#menu-title) {
+  text-wrap: balance;
+}
+.lemrix-site :is(.breaks-copy,.trade-copy,.lucky-copy,.shop-lead,.menu-heading)>p {
+  text-wrap: pretty;
+}
+.lemrix-site :is(a,button,summary):focus-visible,
+.lemrix-site :is(input,textarea):focus-visible {
+  outline: 3px solid var(--lab-outline);
+  outline-offset: 4px;
+}
+.lemrix-site :is(.button,.nav-ticket,.text-link,.shop-shelf) {
+  -webkit-tap-highlight-color: transparent;
+}
+.lemrix-site :is(.nav-ticket,.desktop-nav a) {
+  text-underline-offset: 6px;
+}
+.lemrix-site .nav-world {
+  isolation: isolate;
+}
+.lab-scroll-progress {
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 3px;
+  background: var(--lab-gold);
+  transform: scaleX(0);
+  transform-origin: left center;
+  pointer-events: none;
+  z-index: 14;
+}
+.lab-preview-banner {
+  position: fixed;
+  z-index: 100;
+  bottom: clamp(10px,2.4vw,22px);
+  right: clamp(10px,2.4vw,22px);
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  max-width: min(90vw, 430px);
+  padding: 9px 10px 9px 15px;
+  border-radius: 12px;
+  border: 1px solid #faf2df55;
+  background: #152152f2;
+  color: #fff3d4;
+  box-shadow: 0 12px 34px #07133946;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: .02em;
+}
+.lab-preview-banner__dot {
+  flex: none;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--lab-gold);
+  box-shadow: 0 0 0 3px #f6cd7326;
+}
+.lab-preview-banner__link {
+  color: var(--lab-gold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.lab-preview-banner__close {
+  display: inline-grid;
+  place-items: center;
+  border: none;
+  border-radius: 6px;
+  min-height: 30px;
+  min-width: 30px;
+  background: #ffffff15;
+  color: inherit;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+.lab-chapter-label {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  top: -30px;
+  pointer-events: none;
+  color: currentColor;
+  opacity: .63;
+  font-family: var(--body);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.3;
+  letter-spacing: .17em;
+  text-transform: uppercase;
+}
+.lab-chapter-label::before {
+  content: '';
+  display: inline-block;
+  width: 17px;
+  height: 1px;
+  background: currentColor;
+  vertical-align: middle;
+  margin-right: 10px;
+  opacity: .75;
+}
+.lab-chapter-label--inline { top: -20px; }
+.lemrix-site :is(.collab-heading,.breaks-copy,.lucky-copy,.trade-copy,.faq-section>div:first-child) {
+  position: relative;
+}
+.lemrix-site .breaks-copy,
+.lemrix-site .trade-copy {
+  isolation: isolate;
+}
+@media (hover: hover) and (pointer: fine) {
+  .lemrix-site .button.collector-primary,
+  .lemrix-site .shop-shelf,
+  .lemrix-site .contact-options :is(a,button) {
+    transition-duration: .33s;
+    transition-timing-function: var(--lab-ease);
+  }
+  .lemrix-site .button.collector-primary[data-lab-magnet] {
+    translate: var(--lab-x,0px) var(--lab-y,0px);
+    transition: translate .33s var(--lab-ease), background-color .22s ease, box-shadow .22s ease, transform .22s ease;
+  }
+  .lemrix-site .button.collector-primary[data-lab-magnet]:active {
+    scale: .98;
+    transition-duration: .08s;
+  }
+  .lemrix-site .shop-showcase .showcase-card {
+    translate: var(--lab-card-x,0px) var(--lab-card-y,0px);
+    transition: translate .4s var(--lab-ease), filter .35s ease;
+  }
+  .lemrix-site .shop-showcase .showcase-lemrix {
+    translate: var(--lab-mascot-x,0px) var(--lab-mascot-y,0px);
+    transition: translate .45s var(--lab-ease);
+  }
+  .lemrix-site .shop-shelf .shelf-icon {
+    transition: transform .42s var(--lab-ease);
+    transform-origin: 35% 70%;
+  }
+  .lemrix-site .shop-shelf .shelf-arrow {
+    transition: translate .35s var(--lab-ease);
+  }
+  .lemrix-site .shop-shelf:hover .shelf-icon,
+  .lemrix-site .shop-shelf:focus-visible .shelf-icon {
+    transform: rotate(-8deg) translateY(-5px);
+  }
+  .lemrix-site .shop-shelf:hover .shelf-arrow,
+  .lemrix-site .shop-shelf:focus-visible .shelf-arrow {
+    translate: 3px -3px;
+  }
+}
+.lemrix-site .shop-shelf:focus-visible { box-shadow: 4px 5px 0 var(--ink); }
+.lemrix-site .faq-list details {
+  transition: background-color .25s ease, padding .25s var(--lab-ease);
+}
+.lemrix-site .faq-list details[open] {
+  background: #f4e8d077;
+}
+.lemrix-site .menu-board-section dt {
+  font-weight: 750;
+}
+.lab-shop-note {
+  max-width: 39ch;
+  margin: 20px 0 0;
+  padding: 12px 15px;
+  border-left: 3px solid #e8bb57;
+  border-radius: 0 7px 7px 0;
+  background: #f5e8cb88;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #28315f;
+}
+.lab-shop-note strong { display: block; font-size: 13px; }
+.lab-cart-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+.lab-cart-actions .button { text-decoration: none; }
+.lab-cart-actions .text-link { color: var(--ink); }
+@media (max-width: 760px) {
+  .lemrix-site .shop-hero {
+    row-gap: clamp(20px,5vw,44px);
+  }
+  .lemrix-site .shop-lead h1,
+  .lemrix-site .menu-heading h1 {
+    line-height: .98;
+  }
+  .lemrix-site .shop-departments-heading {
+    align-items: flex-start;
+  }
+  .lab-chapter-label {
+    top: -24px;
+    font-size: 9px;
+  }
+  .lab-preview-banner {
+    gap: 9px;
+    left: 12px;
+    right: 12px;
+    max-width: none;
+    justify-content: space-between;
+    font-size: 10px;
+    padding: 8px 9px 8px 11px;
+  }
+  .lab-shop-note {
+    max-width: 100%;
+    margin-top: 15px;
+  }
+}
+@media (max-width: 430px) {
+  .lab-preview-banner { font-size: 9px; gap: 7px; }
+  .lab-preview-banner__close { min-width: 30px; }
+  .lemrix-site .shop-departments-heading { flex-direction: column; gap: 5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lemrix-site [data-lab-magnet], .lemrix-site .shop-showcase .showcase-card,
+  .lemrix-site .shop-showcase .showcase-lemrix,
+  .lemrix-site .shop-shelf .shelf-icon,
+  .lemrix-site .shop-shelf .shelf-arrow {
+    translate: none !important;
+    transition: none !important;
+    transform: none;
+  }
+}
