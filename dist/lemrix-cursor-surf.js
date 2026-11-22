@@ -1,77 +1,256 @@
-/** Lemrix cursor-surfer — 11 transparent 200x200 sprite frames.
- *  Drop the accompanying CSS, JS and sprite asset in dist/, and reference
- *  <link rel="stylesheet" href="/lemrix-cursor-surf.css">
- *  <script src="/lemrix-cursor-surf.js" defer></script>
- */
+/* Lemrix standalone surfer: frame-by-frame sprite state machine, delayed spring follow. */
 (() => {
   'use strict';
-  if (window.__lemrixSurfInstalled) return;
-  window.__lemrixSurfInstalled = true;
-  const desktop = window.matchMedia('(pointer: fine)');
-  if (!desktop.matches) return;
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const root = document.createElement('div');
-  root.id = 'lemrix-cursor-surfer';
-  root.setAttribute('aria-hidden','true');
-  document.body.appendChild(root);
+  const world = document.getElementById('lemrix-world');
+  const mover = document.getElementById('lemrix-mover');
+  const rig = document.getElementById('lemrix-rig');
+  const sprite = document.getElementById('lemrix-cursor-surfer');
+  const trail = document.getElementById('lemrix-trail');
+  if (!world || !mover || !rig || !sprite || !trail) return;
 
-  let targetX = innerWidth / 2, targetY = innerHeight / 2;
-  let x = targetX, y = targetY, lastX = x, lastY = y;
-  let lastCardX = x, lastCardY = y;
-  let active = false, visible = false, lastTime = 0;
-  const cards = new Set();
-  const cardGap = 29, maxCards = 28;
-  const clamp = (x,a,b) => Math.max(a,Math.min(b,x));
-  const onPointer = e => {
-    if (e.pointerType === 'touch' || e.target?.closest?.('dialog[open]')) return;
-    targetX = e.clientX; targetY = e.clientY;
-    active = true; visible = true;
-    root.classList.add('is-visible');
+  // The frames animate even when the mouse is completely still.
+  // 11 different original Lemrix surfing drawings, with dedicated timings and poses.
+  const frames = {
+    idle:  [0,1,0,10,0,1,0,9,10,0],
+    surf:  [0,1,2,3,4,5,6,7,8,9,10],
+    boost: [2,3,4,5,6,5,4,3],
+    turn:  [2,3,4,5,6,7,8,7],
+    jump:  [3,4,5,6,6,5],
+    land:  [7,8,9,10,0]
   };
-  document.addEventListener('pointermove', onPointer, {passive: true});
-  document.documentElement.addEventListener('mouseleave',() => {
-    active = false; visible = false; root.classList.remove('is-visible');
-  });
-  window.addEventListener('blur',() => { active = false; root.classList.remove('is-visible'); });
+  const frameMS = { idle: 290, surf: 100, boost: 61, turn: 94, jump: 116, land: 82 };
+  const clamp = (v,min,max) => Math.min(max,Math.max(min,v));
+  const approach = (value,target,rate,dt) => value + (target-value) * (1-Math.exp(-rate*dt));
+  const pos = {x:innerWidth*.5,y:innerHeight*.53};
+  const target = {x:pos.x,y:pos.y};
+  let velocityX=0, velocityY=0;
+  let pointerVX=0, pointerVY=0, speed=0;
+  let lastPointerX=target.x, lastPointerY=target.y;
+  let lastPointerAt=0, lastPointerEventAt=0, lastInputSpeed=0;
+  let lastHeading=null, turnUntil=0, turnCooldown=0, turnSign=1;
+  let jumpUntil=0, jumpStart=0, landStart=0, nextJump=0, jumpLift=0;
+  let jumpRequested=false, boostUntil=0;
+  let state='idle', stateElapsed=0, lastTick=0, currentFrame=-1;
+  let bank=0, face=1, actualLift=0, currentSquash=1;
+  let prevWorldX=pos.x,prevWorldY=pos.y, lastCardX=pos.x,lastCardY=pos.y;
+  const cards=new Set(),stars=new Set();
+  let lastBurst=0, lastTrailAt=0;
+  mover.dataset.state=state;
 
-  function makeCard(px,py,vx,vy) {
-    if (reduced.matches) return;
-    const card = document.createElement('span');
-    card.className = 'lemrix-surf-card';
-    card.setAttribute('aria-hidden','true');
-    card.style.left = `${px}px`;
-    card.style.top = `${py}px`;
-    card.style.setProperty('--tilt',`${Math.round(Math.atan2(vy,vx)*180/Math.PI)+90}deg`);
-    card.style.setProperty('--dx',`${(-vx*.22+(Math.random()-.5)*36).toFixed(0)}px`);
-    card.style.setProperty('--dy',`${(-vy*.22-28-Math.random()*32).toFixed(0)}px`);
-    card.style.setProperty('--spin',`${Math.round((Math.random()-.5)*105)}deg`);
-    document.body.append(card); cards.add(card);
-    const remove = () => { cards.delete(card); card.remove(); };
-    card.addEventListener('animationend',remove,{once:true});
-    // Prevent DOM buildup when animation is canceled or a tab is backgrounded.
-    setTimeout(remove,1700);
-    if (cards.size > maxCards) { const oldest=cards.values().next().value; if(oldest){cards.delete(oldest);oldest.remove();} }
+  const updateViewport = () => {
+    target.x=clamp(target.x,16,innerWidth-16);
+    target.y=clamp(target.y,16,innerHeight-16);
+    pos.x=clamp(pos.x,16,innerWidth-16);
+    pos.y=clamp(pos.y,16,innerHeight-16);
+  };
+  window.addEventListener('resize',updateViewport,{passive:true});
+
+  const pointerMove = e => {
+    if (typeof e.clientX!=='number' || typeof e.clientY!=='number') return;
+    const now=performance.now();
+    const nx=clamp(e.clientX,5,innerWidth-5);
+    const ny=clamp(e.clientY,5,innerHeight-5);
+    if (lastPointerEventAt) {
+      const dt=clamp((now-lastPointerEventAt)/1000,.009,.075);
+      const dx=nx-lastPointerX,dy=ny-lastPointerY;
+      const ix=clamp(dx/dt,-3400,3400), iy=clamp(dy/dt,-3400,3400);
+      const instantSpeed=Math.hypot(ix,iy);
+      pointerVX=pointerVX*.55+ix*.45;
+      pointerVY=pointerVY*.55+iy*.45;
+      speed=Math.hypot(pointerVX,pointerVY);
+      lastInputSpeed=instantSpeed;
+
+      // Going upward makes Lemrix launch. A held upward gesture remains airborne.
+      if (dy < -2 && iy < -175 && now>nextJump) jumpRequested=true;
+      // A sudden change in travel direction performs a carving turn.
+      if (instantSpeed>260 && Math.hypot(dx,dy)>6.5) {
+        const heading=Math.atan2(iy,ix);
+        if(lastHeading !== null) {
+          const da=Math.atan2(Math.sin(heading-lastHeading),Math.cos(heading-lastHeading));
+          if(Math.abs(da)>.62 && now>turnCooldown) {
+            turnSign=Math.sign(da)||1;
+            turnUntil=now+360;
+            turnCooldown=now+435;
+          }
+        }
+        lastHeading=heading;
+      }
+
+      // A genuinely quick cursor whip, not passive catching up, triggers boost.
+      if (instantSpeed>1100 || (speed>740 && instantSpeed>590)) {
+        boostUntil=now+250;
+      }
+    }
+    lastPointerAt=now;lastPointerEventAt=now;
+    lastPointerX=nx;lastPointerY=ny;
+    target.x=nx;target.y=ny;
+  };
+  document.addEventListener('pointermove',pointerMove,{passive:true});
+  document.addEventListener('mousemove',e=>{if(!window.PointerEvent)pointerMove(e);},{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(e.touches.length) {
+      const t=e.touches[0];
+      pointerMove({clientX:t.clientX,clientY:t.clientY});
+    }
+  },{passive:true});
+
+  function setState(next) {
+    if(state===next)return;
+    state=next;stateElapsed=0;currentFrame=-1;
+    mover.dataset.state=next;
+  }
+  function beginJump(now) {
+    jumpRequested=false;
+    jumpStart=now;
+    jumpUntil=now+340;
+    nextJump=now+680;
+    setState('jump');
+    makeStar(pos.x-42,pos.y+8);
+  }
+  function beginLanding(now) {
+    landStart=now;
+    setState('land');
+    if(now-lastBurst>230) {
+      lastBurst=now;
+      for(let i=0;i<4;i++)makeStar(pos.x+(Math.random()-.5)*90,pos.y+20);
+    }
+  }
+  function makeStar(x,y) {
+    if(stars.size>22)return;
+    const p=document.createElement('i');
+    p.className='lemrix-star';
+    p.style.left=x+'px';p.style.top=y+'px';
+    p.style.setProperty('--dx',(Math.random()-.5)*80+'px');
+    p.style.setProperty('--dy',(-20-Math.random()*60)+'px');
+    trail.appendChild(p);stars.add(p);
+    setTimeout(()=>{p.remove();stars.delete(p)},800);
+  }
+  function makeCard(x,y,dx,dy,isBoost=false) {
+    if(cards.size>48){const oldest=cards.values().next().value;if(oldest){oldest.remove();cards.delete(oldest);}}
+    const el=document.createElement('span');
+    el.className='lemrix-card';el.setAttribute('aria-hidden','true');
+    const dir=Math.atan2(dy,dx);
+    const life=1050+Math.random()*460;
+    const f=1+(Math.random()-.5)*.22;
+    el.style.left=x+'px';el.style.top=y+'px';
+    el.style.setProperty('--life',life+'ms');
+    el.style.setProperty('--scale',f);
+    el.style.setProperty('--r0',(-38+Math.random()*76)+'deg');
+    el.style.setProperty('--spin',((Math.random()-.5)*(isBoost?620:350))+'deg');
+    el.style.setProperty('--dx',(-dx*.15+Math.cos(dir+Math.PI/2)*(Math.random()-.5)*115)+'px');
+    el.style.setProperty('--dy',(-dy*.12+35+Math.random()*75)+'px');
+    trail.appendChild(el);cards.add(el);
+    const remove=()=>{cards.delete(el);el.remove();};
+    el.addEventListener('animationend',remove,{once:true});
+    setTimeout(remove,life+150);
+  }
+
+  function renderFrame() {
+    const clip=frames[state];
+    const idx=Math.floor(stateElapsed/frameMS[state])%clip.length;
+    const nextFrame=clip[idx];
+    if(nextFrame===currentFrame)return;
+    currentFrame=nextFrame;
+    sprite.style.backgroundPosition=(nextFrame*10)+'% 0%';
+    sprite.dataset.frame=String(nextFrame);
   }
 
   function animate(now) {
-    const dt = clamp(now-(lastTime||now),0,50); lastTime=now;
-    const ease = 1-Math.exp(-dt*.011);
-    lastX=x; lastY=y;
-    x += (targetX-x)*ease; y += (targetY-y)*ease;
-    const vx = x-lastX, vy = y-lastY;
-    const speed = Math.hypot(vx,vy);
-    const tilt = clamp(vx*1.6,-16,16);
-    // Keep the actual pointer available for clicking, surfer sits just above it.
-    root.style.transform = `translate3d(${x-45}px,${y-138}px,0) rotate(${tilt.toFixed(1)}deg)`;
-    // Sprite frames animate continuously in CSS, independent of pointer speed.
-    // The trail remains distance-based so cards spawn only while travelling.
-    if (active && visible && !reduced.matches &&
-        Math.hypot(x - lastCardX, y - lastCardY) > cardGap) {
-      makeCard(x - 8, y - 14, vx * 10, vy * 10);
-      lastCardX = x; lastCardY = y;
+    const dt=clamp((now-(lastTick||now))/1000,0,.045);
+    lastTick=now;
+    const inactive=now-lastPointerAt>165;
+    if(inactive) {
+      pointerVX*=Math.exp(-dt*13);
+      pointerVY*=Math.exp(-dt*13);
+      speed=Math.hypot(pointerVX,pointerVY);
+      lastHeading=null;
     }
-    // Pause any streaming card effect during inactive tabs / stillness.
+    // Inertial, critically damped spring: distinct delayed follow + smooth stop.
+    const omega=9.3;
+    const accelX=(target.x-pos.x)*omega*omega-2*omega*velocityX;
+    const accelY=(target.y-pos.y)*omega*omega-2*omega*velocityY;
+    velocityX+=accelX*dt;
+    velocityY+=accelY*dt;
+    prevWorldX=pos.x;prevWorldY=pos.y;
+    pos.x+=velocityX*dt;pos.y+=velocityY*dt;
+    const surfSpeed=Math.hypot(velocityX,velocityY);
+    const distance=Math.hypot(target.x-pos.x,target.y-pos.y);
+
+    if(jumpRequested && now>nextJump && (state!=='land'||now-landStart>200)) {
+      beginJump(now);
+    }
+    if(state==='jump') {
+      const rising=!inactive && pointerVY < -78;
+      if((!rising && now-jumpStart>220) || now-jumpStart>960){
+        beginLanding(now);
+      }
+    } else if(state==='land' && now-landStart<390) {
+      // Finish the landing before choosing a normal movement state.
+    } else if(now<jumpUntil && state==='jump') {
+      // Jump held by the pointer.
+    } else if(now<boostUntil && !inactive) {
+      setState('boost');
+    } else if(now<turnUntil && !inactive) {
+      setState('turn');
+    } else if((surfSpeed<48 && speed<46 && distance<17) || (!lastPointerAt && distance<5)) {
+      setState('idle');
+    } else {
+      setState('surf');
+    }
+    stateElapsed+=dt*1000;
+
+    // A soft arc while rising; a compressing spring as the board lands.
+    let liftGoal=0;
+    if(state==='jump') {
+      const t=clamp((now-jumpStart)/310,0,1);
+      liftGoal=-52*(1-Math.pow(1-t,3));
+    } else if(state==='land') {
+      const t=clamp((now-landStart)/390,0,1);
+      liftGoal=-52*Math.pow(1-t,2);
+    }
+    actualLift=approach(actualLift,liftGoal,state==='land'?13:8,dt);
+    if(state==='land' && now-landStart<110) liftGoal+=12;
+
+    // Bank aggressively during sharp pivots; pitch forward during boost.
+    if(Math.abs(pointerVX)>65)face=pointerVX>=0?1:-1;
+    const bankGoal= state==='turn'?turnSign*26:
+      state==='boost'? -10:
+      state==='jump'? -15:
+      state==='land'? 8:
+      clamp(pointerVX*.016,-9,9);
+    bank=approach(bank,bankGoal,state==='turn'?11:7,dt);
+    const squishGoal=state==='boost' ? .84:
+      state==='land' && now-landStart<120 ? .82:
+      state==='idle'?1: .96;
+    currentSquash=approach(currentSquash,squishGoal,13,dt);
+    const wave= state==='idle' ? Math.sin(now*.0046)*5.5 :
+      state==='surf' ? Math.sin(now*.013)*3.5 :
+      state==='boost' ? Math.sin(now*.026)*2.2 : 0;
+    const spriteSize=Number.parseFloat(getComputedStyle(mover).width)||185;
+    mover.style.transform='translate3d('+(pos.x-spriteSize*.52).toFixed(2)+'px,'+
+      (pos.y-spriteSize*.76).toFixed(2)+'px,0)';
+    const stretch=state==='boost'?1.12:state==='jump'?1.035:1;
+    rig.style.transform='translate3d(0,'+(wave+actualLift).toFixed(2)+'px,0) rotate('+
+      bank.toFixed(2)+'deg) scale('+(face*stretch).toFixed(3)+','+currentSquash.toFixed(3)+')';
+    renderFrame();
+
+    // Leave blue collectible cards along the *actual* lagged surfing path.
+    const moved=Math.hypot(pos.x-lastCardX,pos.y-lastCardY);
+    const travelling=surfSpeed>115 && (now-lastPointerAt)<370;
+    if(travelling && moved>33 && now-lastTrailAt>34){
+      const dx=pos.x-prevWorldX,dy=pos.y-prevWorldY;
+      const n=Math.hypot(dx,dy)||1;
+      const nx=dx/n,ny=dy/n;
+      const originX=pos.x-nx*55;
+      const originY=pos.y-ny*38+14;
+      makeCard(originX,originY,velocityX,velocityY,state==='boost');
+      lastCardX=pos.x;lastCardY=pos.y;lastTrailAt=now;
+      if(state==='boost' && Math.random()>.68) makeStar(originX-10,originY-6);
+    } else if(!travelling){
+      lastCardX=pos.x;lastCardY=pos.y;
+    }
     requestAnimationFrame(animate);
   }
+  sprite.style.backgroundPosition='0% 0%';
   requestAnimationFrame(animate);
 })();
