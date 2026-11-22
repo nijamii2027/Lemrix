@@ -106,7 +106,7 @@
     if (time - measureAt >= 100) {
       measureAt = time;
       pastShop = shopHasDisappeared();
-      runwayVisible = motion.isOnScreen(comic);
+      runwayVisible = comic ? motion.isOnScreen(comic) : false;
     }
 
     const reduced = motion.systemReduced;
