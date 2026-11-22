@@ -18,15 +18,14 @@
   let targetX = innerWidth / 2, targetY = innerHeight / 2;
   let x = targetX, y = targetY, lastX = x, lastY = y;
   let lastCardX = x, lastCardY = y;
-  let active = false, visible = false, frame = 0, lastTime = 0;
-  let frameClock = 0, idleTime = 0;
+  let active = false, visible = false, lastTime = 0;
   const cards = new Set();
-  const frameCount = 11, cardGap = 29, maxCards = 28;
+  const cardGap = 29, maxCards = 28;
   const clamp = (x,a,b) => Math.max(a,Math.min(b,x));
   const onPointer = e => {
     if (e.pointerType === 'touch' || e.target?.closest?.('dialog[open]')) return;
     targetX = e.clientX; targetY = e.clientY;
-    active = true; visible = true; idleTime = performance.now();
+    active = true; visible = true;
     root.classList.add('is-visible');
   };
   document.addEventListener('pointermove', onPointer, {passive: true});
@@ -64,20 +63,12 @@
     const tilt = clamp(vx*1.6,-16,16);
     // Keep the actual pointer available for clicking, surfer sits just above it.
     root.style.transform = `translate3d(${x-45}px,${y-138}px,0) rotate(${tilt.toFixed(1)}deg)`;
-    const moving = active && speed > .35;
-    if (moving && !reduced.matches) {
-      frameClock += dt;
-      if (frameClock >= (speed>10 ? 68 : 108)) {
-        frameClock=0;frame=(frame+1)%frameCount;
-        root.style.backgroundPosition=`${frame*10}% 0`;
-      }
-      if (visible && Math.hypot(x-lastCardX,y-lastCardY)>cardGap) {
-        // Drop cards along the character's surf wake, not under the cursor tip.
-        makeCard(x-8,y-14,vx*10,vy*10);
-        lastCardX=x;lastCardY=y;
-      }
-    } else if (now-idleTime>700 && frame !== 0) {
-      frame=0;frameClock=0;root.style.backgroundPosition='0 0';
+    // Sprite frames animate continuously in CSS, independent of pointer speed.
+    // The trail remains distance-based so cards spawn only while travelling.
+    if (active && visible && !reduced.matches &&
+        Math.hypot(x - lastCardX, y - lastCardY) > cardGap) {
+      makeCard(x - 8, y - 14, vx * 10, vy * 10);
+      lastCardX = x; lastCardY = y;
     }
     // Pause any streaming card effect during inactive tabs / stillness.
     requestAnimationFrame(animate);
