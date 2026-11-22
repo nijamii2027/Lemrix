@@ -10,7 +10,15 @@
   transform-origin: 50% 78%; will-change: transform;
   opacity: 0; transition: opacity .16s linear;
 }
-#lemrix-cursor-surfer.is-visible { opacity: 1; }
+/* 11 authored poses in a fixed-time loop; no pointer-speed gating. */
+@keyframes lemrix-surf-frames {
+  from { background-position: 0% 0; }
+  to { background-position: 110% 0; }
+}
+#lemrix-cursor-surfer.is-visible {
+  opacity: 1;
+  animation: lemrix-surf-frames 1.10s steps(11, end) infinite;
+}
 .lemrix-surf-card {
   position: fixed; top: 0; left: 0; width: 27px; height: 38px;
   z-index: 2147482999; pointer-events: none;
