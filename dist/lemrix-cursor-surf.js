@@ -29,7 +29,6 @@
   }
   raft.appendChild(deckLayer);
   rig.appendChild(raft);
-  let replenishIndex = 0;
   // A small vector forearm reaches in the travel direction; click extends its index finger.
   const hand = document.createElement('span');
   hand.id = 'lemrix-cursor-hand';
@@ -179,15 +178,24 @@
   }
 
   function replenishDeck(now) {
-    // Every shed card is replaced from the leading edge of the stack.
-    // Card positions never disappear: visually the board remains infinite.
-    const item = raftCards[replenishIndex % DECK_SIZE];
-    replenishIndex++;
-    item.classList.remove('is-restocking');
-    // Restart on a different slot every time, avoiding piles that visibly deplete.
-    item.offsetWidth;
-    item.classList.add('is-restocking');
-    setTimeout(() => item.classList.remove('is-restocking'), 330);
+    // Move each physical card one slot toward the back, then restock the nose.
+    // The visible raft always remains full: eleven cards before and after a shed.
+    const recycled = raftCards.shift();
+    if (!recycled) return;
+    recycled.classList.remove('is-restocking');
+    recycled.style.opacity = '0';
+    raftCards.push(recycled);
+    for (let i = 0; i < raftCards.length; i++) {
+      const item = raftCards[i];
+      item.style.setProperty('--slot', String(i));
+      item.style.setProperty('--slot-x', (i * 6.05).toFixed(2) + '%');
+      item.style.setProperty('--slot-tilt', (i * .14).toFixed(2) + 'deg');
+    }
+    // The card that shed from the rear visibly materialises again at the front.
+    recycled.offsetWidth;
+    recycled.style.opacity = '';
+    recycled.classList.add('is-restocking');
+    setTimeout(() => recycled.classList.remove('is-restocking'), 340);
   }
 
   function renderFrame() {
