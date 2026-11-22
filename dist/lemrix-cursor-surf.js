@@ -188,10 +188,11 @@
       // Finish the landing before choosing a normal movement state.
     } else if(now<jumpUntil && state==='jump') {
       // Jump held by the pointer.
+    } else if(now<turnUntil && !inactive) {
+      // A sudden pivot overrides boost long enough for the carve to be visible.
+      setState('turn');
     } else if(now<boostUntil && !inactive) {
       setState('boost');
-    } else if(now<turnUntil && !inactive) {
-      setState('turn');
     } else if((surfSpeed<48 && speed<46 && distance<17) || (!lastPointerAt && distance<5)) {
       setState('idle');
     } else {
