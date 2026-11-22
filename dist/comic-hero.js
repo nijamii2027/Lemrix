@@ -23,7 +23,7 @@
     return { element, runner, phaseOffset: element.dataset.actor === 'cookd' ? .75 : 0,
       cel: 0, facing: 1, ready: false };
   });
-  comic.append(runway);
+  (comic || hero).append(runway);
   const nav = document.querySelector('.nav-world');
   let visible = motion.isOnScreen(hero);
   let backdropReady = false;
