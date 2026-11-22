@@ -113,3 +113,161 @@ body { background: #182653; overflow: hidden; touch-action: none; }
   .lemrix-card { animation-duration: 1600ms; }
   #lemrix-mover[data-state="boost"] #lemrix-speedlines { animation: none; }
 }
+
+
+/* VERSION 7 — Lemrix rides an endless fan of cards, never a solid board. */
+:root { --sprite-size: clamp(108px, 10.4vw, 150px); }
+
+/* The original red platform is cropped OUT; cards replace it below his feet.
+   This also prevents the old surfboard from being abruptly cut at frame edges. */
+#lemrix-cursor-surfer {
+  z-index: 3;
+  clip-path: inset(0 0 15% 0);
+  filter: saturate(1.09) contrast(1.075) drop-shadow(0 2px 1px #06184538);
+}
+#lemrix-glow { z-index: 0; left: 13%; width: 77%; top: 71%; }
+#lemrix-spray { top: 86%; left: 19%; opacity: .12; }
+#lemrix-card-raft {
+  position: absolute;
+  left: 1.2%; top: 76%;
+  width: 98%; height: 24%;
+  z-index: 4;
+  pointer-events: none;
+  transform-origin: 52% 37%;
+  will-change: transform;
+}
+#lemrix-card-raft::before {
+  content: "";
+  position: absolute;
+  left: 5%; width: 89%; height: 27%;
+  top: 67%;
+  background: #08173f60;
+  border-radius: 100%;
+  filter: blur(5px);
+}
+#lemrix-card-deck {
+  position: absolute; inset: 0;
+  transform: rotate(-3deg) skewX(-4deg);
+  filter: drop-shadow(0 2px 1px #101b58a0);
+}
+.lemrix-raft-card {
+  --jitter: 0deg;
+  --lift: 0px;
+  position: absolute;
+  display: block;
+  width: 35%;
+  height: 62%;
+  top: calc(26% + (var(--slot) * .12%));
+  left: calc(1% + var(--slot) * 6.05%);
+  border-radius: 3px;
+  border: 1.5px solid #111d54;
+  background: linear-gradient(151deg,#85b9ed 0 7%,#2563b4 11%,#174a9c 67%,#0b347e 100%);
+  box-shadow: 0 1px 0 #f6e8cb, 1px 2px 1px #0a1e58a0, inset 0 0 0 1.7px #96c6e7;
+  transform: translate3d(0,var(--lift),0)
+    rotate(calc(-5deg + var(--jitter) + var(--slot) * .14deg));
+  transform-origin: 52% 45%;
+  z-index: calc(20 - var(--slot));
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.lemrix-raft-card:nth-child(3n+2) { background: linear-gradient(150deg,#6da9e0,#1d51a5 60%,#092970); }
+.lemrix-raft-card:nth-child(4n) { transform: translate3d(0,var(--lift),0) rotate(calc(1deg + var(--jitter))); }
+.lemrix-raft-card::before {
+  content: "";
+  position: absolute;
+  inset: 2px 3px;
+  border-radius: 1px;
+  border: 1px solid #99d0ffad;
+  background:
+    radial-gradient(ellipse at center,transparent 0 27%,#90c9fb 29% 35%,transparent 36%),
+    linear-gradient(115deg,transparent 43%,#edf7ff19 46% 51%,transparent 53%);
+}
+.lemrix-raft-card::after {
+  content: "";
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 8px; height: 8px;
+  transform: translate(-50%,-50%);
+  border-radius: 50%;
+  border: 1px solid #0b2459;
+  background: linear-gradient(180deg,#ef5d53 0 44%,#152653 44% 55%,#fff9e8 56%);
+  box-shadow: 0 0 0 1px #d9ebffcc;
+}
+.lemrix-raft-card.is-restocking {
+  animation: lemrix-refill .31s cubic-bezier(.24,.7,.23,1) both;
+}
+@keyframes lemrix-refill {
+  0% { opacity: 0; scale: .83; filter: brightness(1.45); }
+  65% { opacity: 1; scale: 1.06; }
+  100% { opacity: 1; scale: 1; filter: brightness(1); }
+}
+#lemrix-mover[data-state="boost"] #lemrix-card-raft {
+  filter: drop-shadow(-4px 2px 2px #63c7fd38);
+}
+#lemrix-mover[data-state="land"] #lemrix-card-raft {
+  filter: drop-shadow(0 4px 2px #65d1fd55);
+}
+/* Cards in the wake look like they actually peeled off the raft, but they are
+   capped, small, and quickly fade: future links and controls remain unobscured. */
+#lemrix-trail .lemrix-card {
+  width: 19px;
+  height: 27px;
+  border-width: 1px;
+  border-radius: 2.8px;
+  box-shadow: 0 0 0 1px #163d7e, inset 0 0 0 1.5px #86bae4, 0 2px 3px #0b174a30;
+  z-index: 1;
+}
+#lemrix-trail .lemrix-card::before { inset: 3px 2px; border-width: 1px; }
+#lemrix-trail .lemrix-card::after {
+  width: 8px; height: 8px; border-width: 1px;
+}
+@keyframes lemrix-card-float {
+  0%   { opacity: .88; transform: translate3d(-50%,-50%,0) rotate(var(--r0)) rotateY(4deg) scale(calc(var(--scale) * .8)); }
+  29%  { opacity: .65; }
+  100% { opacity: 0; transform: translate3d(calc(-50% + var(--dx)),calc(-50% + var(--dy)),0) rotate(calc(var(--r0) + var(--spin))) rotateY(145deg) scale(calc(var(--scale) * .42)); }
+}
+/* Subtle moving hand as a future website-friendly precision cursor. */
+#lemrix-cursor-hand {
+  position: absolute;
+  top: 39%; left: 56%;
+  width: 46%; height: 39%;
+  transform-origin: 6% 58%;
+  opacity: 0;
+  z-index: 5;
+  pointer-events: none;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 2px 1px #0b24594a);
+}
+#lemrix-cursor-hand svg {
+  display: block; width: 100%; height: 100%;
+  overflow: visible;
+}
+.lemrix-hand-base, .lemrix-finger {
+  stroke: #142252;
+  stroke-width: 5.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: #7bd2ef;
+}
+.lemrix-finger, .lemrix-finger-tip {
+  opacity: 0;
+  transition: opacity .085s linear;
+}
+.lemrix-finger-tip {
+  fill: none;
+  stroke: #172354;
+  stroke-width: 2.3;
+  stroke-linecap: round;
+}
+#lemrix-cursor-hand.is-pointing .lemrix-finger,
+#lemrix-cursor-hand.is-pointing .lemrix-finger-tip { opacity: 1; }
+#lemrix-cursor-hand.is-pointing .lemrix-hand-base {
+  fill: #86d9f5;
+}
+@media(max-width:680px) {
+  :root { --sprite-size: clamp(109px, 25vw, 140px); }
+  #lemrix-cursor-hand { width: 45%; }
+}
+@media(prefers-reduced-motion: reduce) {
+  .lemrix-raft-card.is-restocking { animation-duration: .55s; }
+}
