@@ -168,7 +168,8 @@ body { background: #182653; overflow: hidden; touch-action: none; }
   transform-origin: 52% 45%;
   z-index: calc(20 - var(--slot));
   pointer-events: none;
-  will-change: transform, opacity;
+  will-change: transform, opacity, left;
+  transition: left .22s cubic-bezier(.15,.7,.2,1);
 }
 .lemrix-raft-card:nth-child(3n+2) { background: linear-gradient(150deg,#6da9e0,#1d51a5 60%,#092970); }
 .lemrix-raft-card:nth-child(4n) { transform: translate3d(0,var(--lift),0) rotate(calc(1deg + var(--jitter))); }
