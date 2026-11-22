@@ -21,6 +21,8 @@
     const card = document.createElement('span');
     card.className = 'lemrix-raft-card';
     card.style.setProperty('--slot', String(i));
+    card.style.setProperty('--slot-x', (i * 6.05).toFixed(2) + '%');
+    card.style.setProperty('--slot-tilt', (i * .14).toFixed(2) + 'deg');
     card.style.setProperty('--phase', String(i * .63));
     deckLayer.appendChild(card);
     raftCards.push(card);
