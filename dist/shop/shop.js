@@ -479,6 +479,9 @@ async function checkOwnedCheckout(action='status') {
         const trackLink = byId('recovery-track');
         trackLink.href = '#track/' + attempt;
         trackLink.hidden = false;
+        // Keep the paid confirmation bookmarkable even when the buyer refreshes.
+        history.replaceState(history.state, '', trackLink.href);
+        renderRoute();
       }
     } else throw new Error('The checkout status could not be verified.');
   } catch (error) {
@@ -588,10 +591,12 @@ function renderDetail(item) {
   byId('availability').textContent=item.availability && item.canBuy && item.collection !== 'pre-orders' ? item.availability : defaultAvailability;
   offerCopies(item);
   byId('detail-description').textContent = item.description;
-  byId('detail-notes').textContent = item.notes;
+  const notes = byId('detail-notes');
+  notes.textContent = item.notes || '';
+  notes.closest('details').hidden = !window.shopEditor?.active && !notes.textContent.trim();
   window.LemrixCollection.inspect(item,copySelection.get(item.id) ?? 0);
   if(byId('detail').dataset.item!==item.id){
-    byId('detail').querySelectorAll('details').forEach((node, index) => { node.open = index === 0; });
+    byId('detail').querySelectorAll('details:not([hidden])').forEach((node, index) => { node.open = index === 0; });
     byId('detail').dataset.item=item.id;
   }
   updateCartState();

@@ -380,3 +380,5 @@ html[data-motion="reduced"] #search-dialog[open],html[data-motion="reduced"] #se
 #tracking-shipments a{justify-self:start;text-decoration:underline;text-underline-offset:.15em}
 #tracking-actions{display:flex;gap:1.3rem;flex-wrap:wrap;margin:1rem 0}
 #tracking-copy-status{display:block;margin:.4rem 0}
+
+body:has(#tracking-page:not([hidden])) #recovery-track{display:none}
