@@ -210,7 +210,6 @@ export async function handleInventory(request, env, initial) {
         '/api/items':['GET','POST'], '/api/taxonomy':['GET','POST'], '/api/items/push':['POST'], '/api/images':['POST'],
         '/api/customer/session':['GET'], '/api/customer/login':['POST'], '/api/customer/register':['POST'], '/api/customer/challenge':['POST'], '/api/customer/google':['POST'], '/api/customer/apple':['POST'], '/api/customer/logout':['POST'],
         '/api/rewards':['GET'], '/api/rewards/code':['GET'], '/api/rewards/join':['POST'], '/api/rewards/recover':['POST'],
-        '/api/rewards/art/hill-club':['GET'], '/api/rewards/art/last-showing':['GET'], '/api/rewards/art/after-hours':['GET'],
         '/api/offers/list':['POST'], '/api/offers/lookup':['POST'], '/api/offers/submit':['POST'], '/api/offers/checkout':['POST'],
         '/api/staff/offers/list':['POST'], '/api/staff/offers/review':['POST'],
         '/api/checkout':['POST'], '/api/checkout/status':['POST'], '/api/checkout/tracking':['POST'], '/api/checkout/cancel':['POST'], '/api/square/webhook':['POST'],

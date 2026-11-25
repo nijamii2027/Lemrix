@@ -1,10 +1,5 @@
 const rewardsPrefix='store/v1/rewards/';
 const passCookie='__Host-lemrix-pass';
-const rewardPrints=[
-  {id:'hill-club',name:'Hill Club',at:0},
-  {id:'last-showing',name:'Last Showing',at:25},
-  {id:'after-hours',name:'After Hours',at:100}
-];
 async function passDigest(raw){return hex(await crypto.subtle.digest('SHA-256',encoder.encode(raw)));}
 const membershipKey = 'store/v2/rewards/members.json';
 const codePattern = /^[a-f0-9]{32}$/;
@@ -97,7 +92,7 @@ function rewardView(wallet, member) {
   const orders = Object.values(wallet?.ledger.orders || {});
   const merchandiseCents = orders.reduce((sum, order) => sum + Math.max(0, (order.subtotal || 0) - (order.refund || 0)), 0);
   const points = Math.floor(merchandiseCents / 100);
-  return {member, points, prints:rewardPrints.map(print => ({...print, available:member && points >= print.at}))};
+  return {member, points};
 }
 async function rewardsRoute(request,env,url) {
   const action=url.pathname.slice('/api/rewards'.length);
@@ -132,15 +127,7 @@ async function rewardsRoute(request,env,url) {
     if(!wallet)reject(404,'No previous rewards record found.');
     return json({code:wallet.code.toUpperCase().match(/.{4}/g).join('-')});
   }
-  const print=rewardPrints.find(p=>action==='/art/'+p.id);
-  if(!print)reject(404,'Reward not found.');
-  if(rewardView(wallet, true).points<print.at)reject(403,'This print is still locked.');
-  const fixture=rewardArtwork[print.id];
-  const stored=fixture ? null : await env.BUCKET.get('store/v2/reward-art/'+print.id);
-  if(!fixture && !stored)reject(503,'This print is temporarily unavailable.');
-  return new Response(fixture ? Uint8Array.from(atob(fixture),c=>c.charCodeAt(0)) : stored.body,{headers:{
-    'Content-Type':'image/webp','Content-Disposition':'attachment; filename="Lemrix-'+print.id+'.webp"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'
-  }});
+  reject(404,'Reward not found.');
 }
 async function recordReward(env,metadata,field,cents){
   if(metadata?.store!==checkoutStore||!/^[a-f0-9]{64}$/.test(metadata.reward_pass||'')||!/^[a-f0-9-]{36}$/.test(metadata.attempt||'')||!Number.isSafeInteger(cents)||cents<0)return;

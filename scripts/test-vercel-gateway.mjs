@@ -95,7 +95,7 @@ try {
       [api('items'), 'POST', '/api/items'],
       [api('items/push'), 'POST', '/api/items/push'],
       [api('images'), 'POST', '/api/images'],
-      [api('rewards/art/hill-club'), 'GET', '/api/rewards/art/hill-club'],
+      [api('rewards'), 'GET', '/api/rewards'],
       [api('checkout/status'), 'POST', '/api/checkout/status'],
       [api('checkout/tracking'), 'POST', '/api/checkout/tracking'],
     ]) {

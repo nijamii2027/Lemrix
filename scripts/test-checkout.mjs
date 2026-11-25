@@ -398,7 +398,7 @@ async function account(short,key,expires=Date.now()+60000) {
   return {cookie:'__Host-lemrix-customer='+token};
 }
 for(const cookie of ['',oldCookie,adminCookie]){
-  for(const [suffix,body] of [['',null],['/join',{}],['/recover',{code:oldCode}],['/code',null],['/art/hill-club',null]]) {
+  for(const [suffix,body] of [['',null],['/join',{}],['/recover',{code:oldCode}],['/code',null]]) {
     assert.equal((await request(rewards+suffix,body,{cookie})).status,401);
   }
 }
@@ -410,11 +410,7 @@ assert.equal((await (await request(rewards,null,oldAccount)).json()).points,3);
 const memberStart = await (await request(rewards,null,member)).json();
 assert.equal(memberStart.member,true);
 assert.equal(memberStart.points,0);
-assert.deepEqual(memberStart.prints.map(print=>print.available),[true,false,false]);
-assert.equal((await request(rewards+'/art/hill-club',null,member)).status,200,'A new account can download its welcome print immediately');
-assert.equal((await request(rewards+'/art/last-showing',null,member)).status,403);
 const publicRewards=await (await request(rewards)).json();
-assert.deepEqual(publicRewards.prints.map(print=>print.available),[false,false,false]);
 
 assert.equal((await request(rewards+'/recover',{code:claimedCode},member)).status,409,'A previous owner retains their pass');
 assert.equal((await request(rewards+'/recover',{code:oldCode},oldAccount)).status,409,'An existing member cannot acquire another pass');
@@ -426,10 +422,6 @@ assert.equal((await raced.find(r=>r.status===200).json()).points,3);
 assert.equal((await request(rewards+'/join',{}, {origin:'https://unrelated.example'})).status,403);
 const join=await request(rewards+'/join',{},member);
 assert.equal((await join.json()).points,0);
-assert.equal((await request(rewards+'/art/last-showing',null,member)).status,403);
-const print=await request(rewards+'/art/hill-club',null,member);
-assert.equal(print.headers.get('Content-Type'),'image/webp');
-assert.equal(Buffer.from(await print.arrayBuffer()).toString('ascii',8,12),'WEBP');
 const {code}=await (await request(rewards+'/code',null,member)).json();
 assert.equal((await request(rewards+'/recover',{code:'wrong'},member)).status,400);
 assert.equal((await request(rewards+'/recover',{code},member)).status,200);
@@ -448,8 +440,6 @@ console.log('Cart checks passed for selected copies, quantities, shared shipping
 
 const balance=async()=>(await (await request(rewards,null,firstPurchase)).json()).points;
 assert.equal(await balance(),44);
-assert.equal((await request(rewards+'/art/last-showing',null,firstPurchase)).status,200);
-assert.equal((await request(rewards+'/art/after-hours',null,firstPurchase)).status,403);
 cartSession.refunded_money=money(1550);
 const refund={id:squareId(), order_id:cartSession.order_id, payment_id:cartSession.id, status:'COMPLETED', amount_money:money(1550)};
 assert.equal((await event(refund,true,'refund.updated')).status,200);
@@ -460,11 +450,10 @@ cartSession.refunded_money=money(cartSession.amount_money.amount);
 await event(remainingRefund,true,'refund.updated');
 await event(cartSession);
 assert.equal(await balance(),0);
-assert.equal((await request(rewards+'/art/last-showing',null,firstPurchase)).status,403);
 assert.equal((await (await request(rewards,null,member)).json()).points,0,'Balances belong to the purchasing account');
 await env.BUCKET.put('store/v1/rewards/'+digest(claimedCode)+'.json',JSON.stringify({orders:{one:{subtotal:59},two:{subtotal:52}}}));
 assert.equal((await (await request(rewards,null,oldAccount)).json()).points,1,'Fractional spend carries forward between orders');
-console.log('Verified rewards enrolment, recovery, protected artwork, shipping exclusion, duplicate webhook protection and partial/full refunds.');
+console.log('Verified rewards enrolment, recovery, shipping exclusion, duplicate webhook protection and partial/full refunds.');
 
 // Card data and processor messages must not escape in a response or diagnostic.
 const processorFetch = globalThis.fetch;

@@ -54,7 +54,7 @@ Staff sign in directly using the Lemrix username and password. A successful pass
 
 The API accepts the project's `lemrix.vercel.app`, `lemrix-surf.vercel.app`, `lemrix.com.au`, and `www.lemrix.com.au` origins, plus Vercel's exact deployment and branch hostnames supplied by the platform. Browser writes must come from the same origin as the request. When attaching another custom domain, add its HTTPS origin to `PUBLIC_ORIGINS` in `api/gateway.mjs` and redeploy.
 
-Customer accounts use server sessions. Customers can check out as guests or sign in to earn one Lem Point per AUD $1 of paid merchandise. Fractional spend carries forward between orders. Shipping is excluded, and refunds reduce the balance. Existing account-linked artwork and points carry over. The three original WebP prints live in private storage under `store/v2/reward-art/` with the keys `hill-club`, `last-showing` and `after-hours`.
+Customer accounts use server sessions. Customers can check out as guests or sign in to earn one Lem Point per AUD $1 of paid merchandise. Fractional spend carries forward between orders. Shipping is excluded, and refunds reduce the balance. Existing account balances carry over.
 
 ## Verify after deployment
 
