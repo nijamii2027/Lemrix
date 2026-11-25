@@ -125,7 +125,7 @@ window.LemrixSheetSnapshot = (() => {
     const copy = find('.tv-copy'), socials = Array.from(copy.querySelectorAll('.social-sticker img'));
     const floor = find('.tv-floor'), screen = find('.crt-picture'), video = screen.querySelector('video');
     const frame = find('.crt > img'), watcher = find('.watcher'), loop = find('.watch-loop');
-    const still = find('.watcher .still'), control = find('.play-toggle');
+    const still = find('.watcher .still');
     let cached = null, pending = null, version = 0, disposed = false;
     const loadMedia = () => Promise.all([
       asset('assets/grain.png'), asset('assets/crt-screen.png'), asset('assets/watcher-poses.webp'), asset(video.poster),
@@ -212,23 +212,6 @@ window.LemrixSheetSnapshot = (() => {
       sc.globalCompositeOperation = 'source-over';
       ctx.drawImage(screenCanvas, screenRect.x, screenRect.y, screenRect.w, screenRect.h);
       imageLayer(ctx, frame, origin);
-      if (!control.hidden) {
-        const b = rectOf(control, origin);
-        const css = getComputedStyle(control);
-        ctx.save();
-        ctx.translate(b.x + b.w / 2, b.y + b.h / 2);
-        ctx.beginPath(); ctx.arc(0, 0, b.w / 2 - 1, 0, Math.PI * 2);
-        ctx.fillStyle = css.backgroundColor; ctx.fill();
-        ctx.lineWidth = 2; ctx.strokeStyle = css.borderColor; ctx.stroke();
-        ctx.fillStyle = css.color;
-        if (control.classList.contains('playing')) {
-          ctx.fillRect(-5, -6, 3, 12); ctx.fillRect(2, -6, 3, 12);
-        } else {
-          ctx.beginPath(); ctx.moveTo(-3.5, -6); ctx.lineTo(6.5, 0); ctx.lineTo(-3.5, 6); ctx.fill();
-        }
-        ctx.restore();
-      }
-
       if (getComputedStyle(watcher).visibility !== 'hidden') {
         const b = rectOf(watcher, origin), c = getComputedStyle(loop);
         ctx.save();

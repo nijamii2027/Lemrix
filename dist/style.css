@@ -77,10 +77,6 @@ h1,h2,.wordmark{font-family:var(--display);font-weight:700;letter-spacing:-.057e
 .crt>img{position:absolute;inset:0;width:100%;height:100%;z-index:2}
 .crt-picture{position:absolute;left:22.25%;right:9.05%;top:23.7%;bottom:35.46%;background:#171b38;z-index:1;overflow:hidden;mask:url(assets/crt-screen.png) 0 0 / 100% 100% no-repeat}
 .crt-picture video{height:100%;width:100%;object-fit:cover}
-.play-toggle{pointer-events:auto;position:absolute;z-index:5;bottom:11%;left:29%;width:35px;height:35px;display:grid;place-items:center;border:2px solid #152045;border-radius:50%;background:var(--cream);color:var(--ink);padding:0}
-.play-toggle[hidden]{display:none}
-.play-toggle span{width:0;height:0;border-left:10px solid var(--ink);border-block:6px solid transparent;margin-left:3px}
-.play-toggle.playing span{width:10px;height:12px;margin:0;border:0;border-inline:3px solid var(--ink)}
 .watcher{position:absolute;z-index:4;width:calc(var(--actor)*.878125);aspect-ratio:423/420;right:calc(21% - var(--actor)*.47);bottom:-3%;filter:drop-shadow(0 4px 2px #61404b38)}
 .fall-actor,.flattened,.grabbing-hand,.briffits,.impact{position:absolute;pointer-events:none;visibility:hidden}
 .fall-actor,.flattened{width:var(--actor);aspect-ratio:1;background:url(assets/cinema.webp) 0 0/800% 800% no-repeat;transform-origin:50% 96.25%}

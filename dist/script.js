@@ -12,30 +12,14 @@
   function initPatrol(){if(!patrol && window.LemrixNight)patrol=window.LemrixNight.create(night);}
   initPatrol();
   const video = select('.crt video');
-  const toggle = select('.play-toggle');
   const reduced = window.LemrixMotion || matchMedia('(prefers-reduced-motion: reduce)');
-  let userPaused = reduced.matches, videoChoiceMade=false;
   let videoInView = false;
   let streamReady = true;
-  let playRequest = 0;
-
   function playback() {
-    const play = streamReady && videoInView && !document.hidden && !userPaused;
-    const ticket = ++playRequest;
-    if (play && video.paused) {
-      video.play().catch(() => {
-        if (ticket === playRequest) paintControl();
-      });
-    } else if (!play) video.pause();
+    if (streamReady && videoInView && !document.hidden && !reduced.matches) {
+      if (video.paused) video.play().catch(() => {});
+    } else if (!video.paused) video.pause();
   }
-  function paintControl() {
-    toggle.classList.toggle('playing', !video.paused);
-    toggle.setAttribute('aria-label', video.paused ? 'Play montage' : 'Pause montage');
-  }
-  video.addEventListener('play', paintControl);
-  video.addEventListener('pause', paintControl);
-  toggle.hidden = false;
-  toggle.addEventListener('click', () => { videoChoiceMade=true;userPaused = !video.paused; playback(); });
   if(window.IntersectionObserver)new IntersectionObserver(([entry]) => {
     videoInView = entry.isIntersecting;
     playback();
@@ -481,7 +465,6 @@
     const desired=reduced.matches || !window.LemrixStoryClock?'reduced':'full';
     if(mode===desired)return;
     stop?.();mode=desired;
-    if(!videoChoiceMade)userPaused=reduced.matches;
     playback();
     if(mode==='reduced'){stop=watchNaturalScene();return;}
     // Revert the introductory GSAP tween too when visitors change motion mode.
