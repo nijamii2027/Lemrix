@@ -1,3 +1,26 @@
+// Keep visitor first paint independent of staff tools and the full set directory.
+const loadShopScript = (() => {
+  const base = document.currentScript.src;
+  const loading = new Map();
+  return function load(file) {
+    if (!loading.has(file)) {
+      const script = document.createElement('script');
+      script.src = new URL(file, base).href;
+      const ready = new Promise((resolve, reject) => {
+        script.onload = resolve;
+        script.onerror = () => {
+          loading.delete(file);
+          script.remove();
+          reject(new Error('Could not load shop tools. Please try again.'));
+        };
+      });
+      loading.set(file, ready);
+      document.head.append(script);
+    }
+    return loading.get(file);
+  };
+})();
+
 // The set index is reference data. Listing counts and prices always come from this shop.
 window.LemrixCollection=(()=>{
   const id=s=>document.getElementById(s);
@@ -35,7 +58,28 @@ window.LemrixCollection=(()=>{
     else if(sort==='new')out.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
     return out;
   }
+  const baseLanguages = new Set([...form.elements.language.options].map(option => norm(option.value)));
+  let languageMenuKey;
+  function syncLanguages() {
+    const names = new Map();
+    for (const item of products) {
+      const name = item.card?.language, key = norm(name);
+      if (key && !baseLanguages.has(key)) names.set(key, name);
+    }
+    const values = [...names.values()].sort((a,b) => a.localeCompare(b));
+    const key = JSON.stringify(values);
+    if (key === languageMenuKey) return;
+    languageMenuKey = key;
+    const select = form.elements.language;
+    select.querySelectorAll('[data-custom-language]').forEach(option => option.remove());
+    for (const value of values) {
+      const option = new Option(value,value);
+      option.dataset.customLanguage = '';
+      select.add(option);
+    }
+  }
   function sync() {
+    syncLanguages();
     const q=params();
     for(const k of ['type','language','sort'])form.elements[k].value=q.get(k)||'';
     form.elements.stock.checked=q.has('stock');
@@ -63,17 +107,31 @@ window.LemrixCollection=(()=>{
   function drawSets(){
     const term=norm(id('set-query').value);
     const pool=catalogue.filter(s=>!term||[s.name,s.series,s.code,s.language,...s.aliases||[]].some(t=>norm(t).includes(term)));
-    const eras=[...new Set(pool.map(s=>s.series))];
+    const counts=new Map();
+    for (const set of pool) counts.set(set.series,(counts.get(set.series)||0)+1);
+    const eras=[...counts.keys()];
     if(!eras.includes(era))era=eras[0]||'';
     const collection=term?pool:pool.filter(s=>s.series===era);
     const buttons=eras.map(name=>{
-      const b=element('button','','');b.type='button';b.append(element('span','',name),element('small','',pool.filter(s=>s.series===name).length));
+      const b=element('button','','');b.type='button';b.append(element('span','',name),element('small','',counts.get(name)));
       b.setAttribute('aria-pressed',String(era===name&&!term));b.onclick=()=>{era=name;id('set-query').value='';drawSets();};return b;
     });
     id('set-eras').replaceChildren(...buttons);id('era-heading').textContent=term?'Matching sets':era;
     id('set-options').replaceChildren(...(collection.length?collection.map(makeSetButton):[element('p','','No matching sets.')]));
   }
-  function openSets(){
+  async function openSets(){
+    dialog.showModal();
+    if (!window.LemrixSets) {
+      id('era-heading').textContent='Loading sets…';
+      id('set-options').replaceChildren();
+      try {
+        await loadShopScript('set-directory.js');
+      } catch {
+        id('era-heading').textContent='Could not load sets. Close and try again.';
+        return;
+      }
+      if (!dialog.open) return;
+    }
     catalogue=(window.LemrixSets||[]).map(s=>({...s,stock:0}));
     const lookup=new Map(catalogue.map(s=>[norm(s.language)+'/'+norm(s.name),s]));
     for(const item of products){
@@ -84,7 +142,7 @@ window.LemrixCollection=(()=>{
       entry.stock+=stockCount(item);
     }
     id('set-query').value='';era=catalogue.find(s=>s.stock)?.series||era||catalogue[0]?.series||'';
-    drawSets();dialog.showModal();id('set-query').focus();
+    drawSets();id('set-query').focus();
   }
   id('sets-open').onclick=openSets;id('set-query').oninput=drawSets;
   for(const d of document.querySelectorAll('.collector-dialog')){
@@ -97,7 +155,7 @@ window.LemrixCollection=(()=>{
     for(const key of ['detail-art','closeup-art']){
       const img=id(key);img.src=src;img.alt=key==='detail-art'?current.name+' · '+side:'';
     }
-    const zoom=id('closeup');zoom.setAttribute('aria-pressed','false');zoom.setAttribute('aria-label','Zoom '+side+' photo');
+    const zoom=id('closeup');zoom.setAttribute('aria-pressed','false');zoom.setAttribute('aria-label',window.shopEditor?.active?'Edit '+side+' photo':'Zoom '+side+' photo');
     zoom.style.removeProperty('--zoom-point');
   }
   function inspect(item,copyIndex=0){
@@ -117,11 +175,13 @@ window.LemrixCollection=(()=>{
     }
     dl.replaceChildren(...nodes);dl.hidden=!nodes.length;
   }
-  for(const b of faces.children)b.onclick=()=>{side=b.dataset.side;paintFace();};
+  for(const b of faces.children)b.onclick=()=>{
+    side=b.dataset.side;paintFace();document.dispatchEvent(new CustomEvent('lemrix-photo-face',{detail:side}));
+  };
   const zoom=id('closeup');
   zoom.addEventListener('pointermove',e=>{
     if(zoom.getAttribute('aria-pressed')!=='true')return;
     const r=zoom.getBoundingClientRect();zoom.style.setProperty('--zoom-point',Math.max(0,Math.min(100,(e.clientX-r.left)/r.width*100))+'% '+Math.max(0,Math.min(100,(e.clientY-r.top)/r.height*100))+'%');
   });
-  return {apply,sync,inspect,badge,stockCount,amount,selectedSet:()=>params().get('set')};
+  return {apply,sync,inspect,badge,stockCount,amount,photoFace:()=>side,selectedSet:()=>params().get('set')};
 })();

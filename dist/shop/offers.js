@@ -1,38 +1,24 @@
-// Local demo accounts and per-copy offers. All forms stay on this origin.
+// Customer accounts, listing offers and staff decisions.
 (() => {
   const id = name => document.getElementById(name);
   const dialog = id('deal-dialog');
-  const prefix = 'lemrix.shop.demo.v1.';
-  const sessionKey = prefix + 'session';
+  const prefix = 'lemrix.shop.v2.';
   const format = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', currencyDisplay: 'code' });
   const decimal = cents => (BigInt(cents) / 100n) + '.' + String(cents % 100).padStart(2, '0');
   const money = cents => format.formatToParts(BigInt(cents) / 100n).map(part => part.type === 'fraction' ? String(cents % 100).padStart(2, '0') : part.value).join('');
   const copyName = index => 'Copy ' + String.fromCharCode(65 + index);
-  const accountKey = key => prefix + 'account.' + key;
-  const offerPrefix = key => prefix + 'offer.' + key + ':';
-  const offerKey = (user, choice) => offerPrefix(user.key) + choice.item.id + ':' + choice.index;
   const draftKey = (user, choice) => prefix + 'draft.' + (user?.key || 'guest') + ':' + choice.item.id + ':' + choice.index;
   const drafts = new Map();
   let selection, offerChoice, view = '', resumeOffer = false, generation = 0;
 
-  function localEntry(key) {
-    const raw = localStorage.getItem(key);
-    try { return raw ? JSON.parse(raw) : null; } catch { return null; }
-  }
   let providerUser = null;
-  function currentUser() {
-    if (providerUser) return providerUser;
-    try {
-      const key = sessionStorage.getItem(sessionKey);
-      if (!key) return null;
-      const account = localEntry(accountKey(key));
-      return key.startsWith('user/') && account?.key === key ? account : null;
-    } catch { return null; }
-  }
-  function existing(user, choice) {
-    if (!user || !choice) return null;
-    const record = localEntry(offerKey(user, choice));
-    return record?.itemId === choice.item.id && record.index === choice.index && Number.isSafeInteger(record.cents) && record.cents > 0 ? record : null;
+  let sessionRevision=0;
+  function currentUser() { return providerUser; }
+  function updateCustomer(user) {
+    sessionRevision++;
+    providerUser=user || null;
+    nav();
+    window.dispatchEvent(new CustomEvent('lemrix-customer-session',{detail:{user:providerUser}}));
   }
   function draft(user, choice) {
     const key = draftKey(user, choice);
@@ -52,15 +38,7 @@
     const cents = Number((whole || '0') + fraction.padEnd(2, '0'));
     return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
   }
-  function hex(bytes) { return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join(''); }
-  async function credential(pass, salt) {
-    const bytes = Uint8Array.from(salt.match(/../g), pair => parseInt(pair, 16));
-    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveBits']);
-    const hash = await crypto.subtle.deriveBits({name: 'PBKDF2', hash: 'SHA-256', salt: bytes, iterations: 185000}, key, 256);
-    return hex(new Uint8Array(hash));
-  }
   function alertText(message = '') { id('deal-error').textContent = message; }
-  function storageError() { alertText('This browser could not save the demo. Enable site storage and try again.'); }
   function nav() {
     if (window.shopEditor?.authenticated) { id('account-nav-label').textContent='Lemrix'; id('account-opener').setAttribute('aria-label','Open shop owner account'); return; }
     const user = currentUser();
@@ -82,44 +60,57 @@
   }
   function productSummary(choice) {
     const { item, index } = choice;
-    const copy = item.copies[index];
-    id('deal-image').src = item.image || 'art/' + item.id + '.webp';
+    const copy = item.copies?.[index];
+    id('deal-image').src = copy?.photos?.front || item.image || 'art/' + item.id + '.webp';
     id('deal-item').textContent = item.name;
-    id('deal-copy').textContent = copyName(index) + ' · ' + copy.condition;
-    id('deal-list-price').textContent = 'Sample price ' + money(copy.cents);
+    id('deal-copy').textContent = copy ? copyName(index) + ' · ' + copy.condition : item.category;
+    id('deal-list-price').textContent = 'Listed at ' + money(copy?.cents ?? item.cents);
   }
   function openOffer(choice, restored) {
+    if (window.shopEditor?.authenticated) { openAccount(); return; }
     offerChoice = choice;
     resumeOffer = false;
-    if (window.shopEditor?.authenticated) { show('staff','Lemrix','Press E in the shop to toggle editing.', ['staff-profile']); return; }
     const user = currentUser();
-    let prior;
-    try { prior = existing(user, choice); } catch { prior = null; }
-    show('offer', prior ? 'Edit your offer' : 'Make an offer', 'Demo offers stay in this browser. They do not reserve a card or take payment.', ['deal-product','deal-offer-form']);
+    const prior = choice.record;
+    show('offer', prior ? 'Edit your offer' : 'Make an offer',
+      'Offer on one item. Check your account for a response. Shipping is calculated at checkout.',
+      ['deal-product','deal-offer-form']);
     productSummary(choice);
     const input = id('deal-amount');
     input.value = restored ?? (draft(user, choice) || (prior ? decimal(prior.cents) : ''));
-    input.placeholder = decimal(choice.item.copies[choice.index].cents);
+    input.placeholder = decimal(choice.item.copies?.[choice.index]?.cents ?? choice.item.cents);
     input.removeAttribute('aria-invalid');
-    id('deal-submit').textContent = user ? (prior ? 'Update demo offer' : 'Save demo offer') : 'Sign in to save offer';
+    id('deal-submit').disabled = false;
+    const submit = id('deal-submit');
+    submit.textContent = user ? (prior ? 'Update offer' : 'Send offer') : 'Sign in to send offer';
+    if (user && !prior) {
+      const token = generation;
+      submit.disabled = true;
+      offerApi('offers/lookup',{itemId:choice.item.id,copy:choice.index}).then(({offer}) => {
+        if (generation !== token || !offer) return;
+        if (offer.status === 'pending') {
+          offerChoice = {...choice,record:offer};
+          id('deal-heading').textContent = 'Edit your offer';
+          submit.textContent = 'Update offer';
+          if (!input.value) input.value = decimal(offer.cents);
+        } else if (offer.status === 'accepted') openAccount();
+      }).catch(error => {if(generation === token) alertText(error.message);})
+        .finally(() => {if(generation === token) submit.disabled = false;});
+    }
   }
   function openAuth(signup = false) {
     const retained = resumeOffer ? ' Your offer draft is saved.' : '';
     show(signup ? 'signup' : 'signin', signup ? 'Create an account' : 'Sign in',
-      (signup ? 'Choose a sign-in method, or create a demo username for this browser.' : 'Welcome back to the Lemrix shop.') + retained, ['deal-auth-form']);
+      (signup ? 'Choose a username and a password of at least 12 characters.' : 'Welcome back to the Lemrix shop.') + retained, ['deal-auth-form']);
     id('deal-pass').value = '';
     renderProviderButtons();
+    id('deal-pass').minLength = signup ? 12 : 1;
     id('deal-pass').autocomplete = signup ? 'new-password' : 'current-password';
     id('deal-auth-submit').textContent = signup ? 'Create account' : 'Sign in';
     id('deal-auth-swap').textContent = signup ? 'Already registered? Sign in' : "Don't have an account? Sign up";
   }
   function signedIn(user) {
-    if (user === providerUser) {
-      sessionStorage.removeItem(sessionKey);
-      window.dispatchEvent(new Event('lemrix-customer-session'));
-    }
-    else sessionStorage.setItem(sessionKey, user.key);
-    nav();
+    updateCustomer(user);
     id('deal-pass').value = '';
     if (resumeOffer && offerChoice) {
       const amount = draft(null, offerChoice);
@@ -128,47 +119,98 @@
       openOffer(offerChoice, amount);
     } else openAccount();
   }
-  function accountOffers(user) {
-    const rows = [];
-    const start = offerPrefix(user.key);
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key?.startsWith(start)) continue;
-      const record = localEntry(key);
-      const item = products.find(candidate => candidate.id === record?.itemId);
-      if (Number.isInteger(record?.index) && item?.copies?.[record.index] && key === offerKey(user, {item,index:record.index}) && Number.isSafeInteger(record.cents) && record.cents > 0) rows.push({record,item});
+  async function offerApi(action, body) {
+    const response = await fetch('/api/' + action, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Offers are temporarily unavailable. Please try again.');
+    return data;
+  }
+  function offerAction(label, callback) {
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'deal-text'; button.textContent = label;
+    button.addEventListener('click', async () => {
+      const token = generation;
+      button.disabled = true; alertText();
+      try { await callback(); } catch(error) { if (generation === token) alertText(error.message); }
+      finally {button.disabled = false;}
+    });
+    return button;
+  }
+  const statusLabels = {pending:'Awaiting review',accepted:'Accepted',declined:'Declined',purchased:'Purchased',expired:'Expired'};
+  function offerRow(record, staff) {
+    const card = document.createElement('article'), info = document.createElement('div');
+    card.className = 'offer-review'; info.className = 'deal-record';
+    const summary = document.createElement('span'), title = document.createElement('strong'), details = document.createElement('small');
+    title.textContent = record.name;
+    const status = statusLabels[record.status] || record.status;
+    const copy = record.copy === null ? '' : copyName(record.copy) + ' · ' + record.condition;
+    details.textContent = [staff && record.buyer,copy,status].filter(Boolean).join(' · ');
+    summary.append(title,details);
+    const price = document.createElement('b'); price.textContent = money(record.cents);
+    info.append(summary,price); card.append(info);
+    const actions = document.createElement('div'); actions.className = 'offer-actions';
+    if (staff && record.status === 'pending') {
+      const listPrice = document.createElement('small'); listPrice.textContent = 'Listed at ' + money(record.listCents);
+      actions.append(listPrice);
+      for (const [label,decision] of [['Accept','accepted'],['Decline','declined']]) {
+        actions.append(offerAction(label, async () => {
+          await offerApi('staff/offers/review',{id:record.id,version:record.version,status:decision});
+          if (view === 'staff' && dialog.open) openAccount();
+        }));
+      }
     }
-    return rows.sort((a,b) => b.record.updated - a.record.updated);
+    if (!staff && record.status === 'accepted') {
+      const validity = document.createElement('small');
+      validity.textContent = 'Available while stock lasts';
+      actions.append(validity,offerAction('Check out with Square',async () => {
+      if (checkoutInProgress()) throw new Error('Finish or cancel the open checkout first.');
+      const token = generation;
+      const result = await offerApi('offers/checkout',{id:record.id,version:record.version});
+      const url = squareAddress(result.url);
+      if (!attemptPattern.test(result.attempt) || !url) throw new Error('Square could not open this checkout.');
+      setOwnedAttempt(result.attempt);
+      if (dialog.open && view === 'account' && generation === token) location.assign(url);
+      else showRecovery('Your offer checkout is ready.',{resume:true,cancel:true});
+      }));
+    }
+    if (!staff && record.status === 'pending') {
+      const item = products.find(row => row.id === record.itemId);
+      if (item && (item.copies?.[record.copy] || item).canBuy) {
+        actions.append(offerAction('Edit offer',() => openOffer({item,index:record.copy,record})));
+      }
+    }
+    if (actions.childElementCount) card.append(actions);
+    return card;
+  }
+  async function loadOffers(list, staff, token, cursor) {
+    const route = staff ? 'staff/offers/list' : 'offers/list';
+    try {
+      const data = await offerApi(route,{cursor});
+      if (generation !== token || !dialog.open) return;
+      if (!cursor) list.replaceChildren();
+      list.querySelector('.more-offers')?.remove();
+      for (const record of data.offers) list.append(offerRow(record,staff));
+      if (data.cursor) {
+        const more = offerAction('Show more offers',() => loadOffers(list,staff,token,data.cursor));
+        more.classList.add('more-offers'); list.append(more);
+      }
+      if (!list.childElementCount) list.textContent = staff ? 'No customer offers yet.' : 'Your offers will appear here.';
+    } catch(error) {
+      if (generation !== token) return;
+      if (!cursor) list.replaceChildren(offerAction('Retry loading offers',() => loadOffers(list,staff,token)));
+      alertText(error.message);
+    }
   }
   function openAccount() {
     resumeOffer = false;
-    if (window.shopEditor?.authenticated) { show('staff','Lemrix','Press E in the shop to toggle editing.', ['staff-profile']); return; }
+    const staff = !!window.shopEditor?.authenticated;
     const user = currentUser();
-    if (!user) { openAuth(); return; }
-    show('account', user.name, (user === providerUser ? user.email + '.' : 'Demo account.') + ' Your offers are saved on this browser.', ['deal-profile']);
-    const list = id('deal-offers');
-    list.replaceChildren();
-    let rows;
-    try { rows = accountOffers(user); } catch { storageError(); return; }
-    if (!rows.length) {
-      const empty = document.createElement('p');
-      empty.textContent = 'Choose a card and make an offer on a copy to see it here.';
-      list.append(empty);
-    }
-    rows.forEach(({record, item}) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'deal-record';
-      const image = new Image(43,43); image.src = item.image || 'art/' + item.id + '.webp'; image.alt = '';
-      const info = document.createElement('span'), name = document.createElement('strong'), description = document.createElement('small');
-      name.textContent = item.name; description.textContent = copyName(record.index) + ' · ' + item.copies[record.index].condition;
-      info.append(name, description);
-      const amount = document.createElement('b'); amount.textContent = money(record.cents);
-      button.setAttribute('aria-label','Edit offer for ' + item.name + ', ' + description.textContent + ', ' + amount.textContent);
-      button.append(image, info, amount);
-      button.addEventListener('click', () => openOffer({item,index: record.index}));
-      list.append(button);
-    });
+    if (!staff && !user) { openAuth(); return; }
+    if (staff) show('staff','Lemrix','Manage your shop and review customer offers.', ['staff-profile']);
+    else show('account',user.name,user.email || 'Your Lemrix account', ['deal-profile']);
+    const list = id(staff ? 'staff-offers' : 'deal-offers');
+    list.textContent = 'Loading offers…';
+    loadOffers(list,staff,generation);
   }
 
   async function submitAuth(event) {
@@ -187,7 +229,8 @@
       id('deal-auth-submit').disabled=true;
       try {
         await window.shopEditor.login(pass);
-        sessionStorage.removeItem(sessionKey);
+        if (currentUser()) await customerApi('logout',{});
+        updateCustomer(null);
         id('deal-pass').value='';
         nav();
         if (generation === token) openAccount();
@@ -195,31 +238,15 @@
       finally { id('deal-auth-submit').disabled=false; }
       return;
     }
-    if (pass.length < 6 || pass.length > 128) { alertText('Use a demo passphrase with 6–128 characters.'); id('deal-pass').focus(); return; }
-    if (!window.crypto?.subtle) { alertText('Open the shop over HTTPS to use a demo passphrase or use Google sign-in.'); return; }
-    const key = 'user/' + name.toLowerCase();
     id('deal-auth-submit').disabled = true;
     try {
-      let user = localEntry(accountKey(key));
-      if (signup) {
-        if (user) { alertText('That username already has a demo account. Sign in or choose another.'); return; }
-        const salt = hex(crypto.getRandomValues(new Uint8Array(16)));
-        const hash = await credential(pass, salt);
-        if (generation !== token) return;
-        if (localEntry(accountKey(key))) { alertText('That username is already in use.'); return; }
-        user = {key, name, salt, hash};
-        localStorage.setItem(accountKey(key), JSON.stringify(user));
-      } else {
-        if (!user || !user.salt || await credential(pass, user.salt) !== user.hash) {
-          if (generation === token) alertText('That username and passphrase do not match a demo account on this browser.');
-          return;
-        }
-      }
-      if (generation === token) signedIn(user);
-    } catch { if (generation === token) storageError(); }
-    finally { if (generation === token) id('deal-auth-submit').disabled = false; }
+      const {user}=await customerApi(signup?'register':'login',{username:name,password:pass});
+      if (generation===token) signedIn(user);
+      else updateCustomer(user);
+    } catch(error) { if (generation===token) alertText(error.message); }
+    finally { if (generation===token) id('deal-auth-submit').disabled=false; }
   }
-  function submitOffer(event) {
+  async function submitOffer(event) {
     event.preventDefault();
     if (view !== 'offer' || !offerChoice) return;
     const input = id('deal-amount'), raw = input.value;
@@ -236,13 +263,19 @@
       openAuth();
       return;
     }
-    const { item, index } = offerChoice;
+    const { item, index, record } = offerChoice;
+    const token = generation, choice = offerChoice;
+    const listCents = item.copies?.[index]?.cents ?? item.cents;
+    if (cents > listCents) { alertText('Enter an offer up to the listed price.'); input.focus(); return; }
+    id('deal-submit').disabled = true;
     try {
-      localStorage.setItem(offerKey(user, offerChoice),JSON.stringify({itemId: item.id, index, cents, updated: Date.now()}));
-    } catch { storageError(); return; }
-    setDraft(user, offerChoice, '');
-    show('saved','Offer saved', 'Your ' + money(cents) + ' demo offer for ' + copyName(index) + ' is saved to ' + user.name + ' on this browser.', ['deal-product','deal-saved']);
-    productSummary(offerChoice);
+      await offerApi('offers/submit',{itemId:item.id,copy:index,cents,version:record?.version});
+      setDraft(user, choice, '');
+      if (generation !== token) return;
+      show('saved','Offer sent','Lemrix received your ' + money(cents) + ' offer. You can check its status in your account.', ['deal-product','deal-saved']);
+      productSummary(choice);
+    } catch(error) { if (generation === token) alertText(error.message); }
+    finally {if(generation===token) id('deal-submit').disabled=false;}
   }
 
   id('account-opener').addEventListener('click', openAccount);
@@ -282,8 +315,8 @@
   }
   async function finishProvider(provider,credential) {
     try {
-      providerUser=(await customerApi(provider,{credential})).user;
-      signedIn(providerUser);
+      const {user}=await customerApi(provider,{credential});
+      signedIn(user);
     } catch(error){alertText(error.message);}
     finally {initialized=0;}
   }
@@ -334,21 +367,25 @@
     } catch(error){status.textContent=error.message;}
   }
   async function restoreCustomer(){
-    try {providerUser=(await customerApi('session')).user;nav();if(providerUser && dialog.open && view==='signin' && !resumeOffer) openAccount();} catch {}
+    const revision=sessionRevision;
+    try {
+      const {user}=await customerApi('session');
+      if (revision!==sessionRevision) return;
+      updateCustomer(user);
+      if (user && dialog.open && view==='signin' && !resumeOffer) openAccount();
+    } catch { /* The sign-in form remains available during a network interruption. */ }
   }
   window.addEventListener('pageshow',restoreCustomer);
   id('deal-my-offers').addEventListener('click', openAccount);
   id('deal-logout').addEventListener('click', async () => {
     if(providerUser) {
       try { await customerApi('logout',{}); } catch(error) {alertText(error.message);return;}
-      providerUser=null; initialized=0; window.google?.accounts.id.disableAutoSelect();
-      window.dispatchEvent(new Event('lemrix-customer-session'));
+      updateCustomer(null); initialized=0; window.google?.accounts.id.disableAutoSelect();
     }
-    try { sessionStorage.removeItem(sessionKey); } catch { storageError(); return; }
     nav();
     id('deal-user').value = '';
     openAuth();
-    id('deal-intro').textContent = 'You’re signed out. Sign in again on this browser to see your offers.';
+    id('deal-intro').textContent = 'You’re signed out.';
   });
   window.addEventListener('hashchange', () => { if (dialog.open) dialog.close(); });
   window.addEventListener('shop-account-change',nav);
@@ -360,9 +397,11 @@
   window.LemrixOffers = {
     openCustomerSignIn() { resumeOffer=false; openAuth(); },
     setCopy(item, index = 0) {
-      selection = item?.copies?.[index] ? { item, index } : null;
+      const selected = item?.copies ? item.copies[index] : item;
+      selection = selected?.canBuy && item.collection !== 'pre-orders' ? {item,index:item.copies ? index : null} : null;
+      id('copy-offer').hidden = !selection || index === null;
       id('offer-opener').hidden = !selection;
-      if (selection) id('copy-offer').textContent = 'Make an offer on ' + copyName(index);
+      if (selection && index !== null) id('copy-offer').textContent = 'Make an offer on ' + copyName(index);
     }
   };
   nav();

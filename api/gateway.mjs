@@ -8,7 +8,7 @@ import { readRuntimeConfig } from '../lib/runtime-config.mjs';
 const PUBLIC_ORIGINS = new Set(['https://lemrix.vercel.app', 'https://lemrix-surf.vercel.app', 'https://lemrix.com.au', 'https://www.lemrix.com.au']);
 const COOKIE_NAMES = new Set(['__Host-lemrix-admin', '__Host-lemrix-customer', '__Host-lemrix-google', '__Host-lemrix-pass']);
 const READ_ONLY = new Set(['account', 'customer/session', 'rewards', 'rewards/code', 'rewards/art/hill-club', 'rewards/art/last-showing', 'rewards/art/after-hours']);
-const WRITE_ONLY = new Set(['login', 'logout', 'logout-all', 'items/push', 'images', 'customer/challenge', 'customer/google', 'customer/apple', 'customer/logout', 'rewards/join', 'rewards/recover', 'checkout', 'checkout/status', 'checkout/cancel', 'square/webhook']);
+const WRITE_ONLY = new Set(['offers/list', 'offers/lookup', 'offers/submit', 'offers/checkout', 'staff/offers/list', 'staff/offers/review', 'login', 'logout', 'logout-all', 'items/push', 'images', 'customer/challenge', 'customer/login', 'customer/register', 'customer/google', 'customer/apple', 'customer/logout', 'rewards/join', 'rewards/recover', 'checkout', 'checkout/status', 'checkout/cancel', 'square/webhook']);
 const MAX_BODY = 4_400_000;
 
 function fail(status, message) { const error = new Error(message); error.status = status; throw error; }
@@ -34,7 +34,7 @@ function route(params) {
   }
   if (resource !== 'api') fail(404, 'Unknown shop route.');
   const path = one(params, 'path');
-  if (path === 'items') return {pathname:'/api/items', methods:['GET', 'POST']};
+  if (path === 'items' || path === 'taxonomy') return {pathname:'/api/' + path, methods:['GET', 'POST']};
   if (READ_ONLY.has(path)) return {pathname:'/api/' + path, methods:['GET']};
   if (WRITE_ONLY.has(path)) return {pathname:'/api/' + path, methods:['POST']};
   fail(404, 'Unknown shop route.');

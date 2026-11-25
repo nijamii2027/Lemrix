@@ -91,7 +91,8 @@ html[data-motion="reduced"] .catalogue-add :is(.catalogue-add-mark,.catalogue-ad
 /* The same stock controls follow a product through both shop views. */
 .inventory-panel{display:none}
 .shop-editing .inventory-panel{display:flex;align-items:center;flex-wrap:wrap;gap:.45rem .8rem;margin-top:.7rem;padding:.65rem .75rem;border:1px solid #dce0e5;border-radius:.65rem;background:#fafbf9;text-align:left;color:#1b2649;font:500 .8rem/1.35 DM,system-ui,sans-serif}
-.inventory-quantity{display:flex;align-items:center;gap:.5rem;font-size:.76rem;font-weight:700}
+.inventory-dispatch,.inventory-quantity{display:flex;align-items:center;gap:.5rem;font-size:.76rem;font-weight:700}
+.inventory-dispatch .shop-input{width:auto;max-width:100%;color-scheme:light}
 .inventory-quantity .shop-input{width:6.25ch;min-width:4.2rem;max-width:100%;border:1px solid #9fa8b7;padding:.36rem .45rem;border-radius:.3rem;background:#fff;color:#1b2649;font:600 .9rem/1.3 DM,system-ui,sans-serif;font-variant-numeric:tabular-nums}
 .inventory-status{font-size:.76rem;color:#465448;font-variant-numeric:tabular-nums}
 .inventory-actions{flex-basis:100%;display:flex;align-items:center;flex-wrap:wrap;gap:.3rem .75rem}
@@ -121,3 +122,29 @@ html[data-motion="reduced"] .catalogue-add :is(.catalogue-add-mark,.catalogue-ad
   .inventory-panel button{min-height:36px}
   #showroom-inventory .inventory-actions{justify-content:center}
 }
+
+/* Editing keeps each value and photo independently reachable by touch or keyboard. */
+.browse-edit-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.55rem;margin:.7rem 0;text-align:left}
+.browse-edit-fields label{display:grid;align-content:start;gap:.25rem;font:650 .74rem/1.35 DM,system-ui,sans-serif;color:#4c5469}
+.browse-edit-fields label:first-child{grid-column:1/-1}
+.browse-edit-fields .shop-input{width:100%;min-height:40px;inline-size:100%!important;padding:.45rem .55rem;border:1px solid #bcc4d1;border-radius:.45rem;background:#fff;color:var(--ink);font:500 1rem/1.3 DM,system-ui,sans-serif;text-align:left}
+.browse-edit-fields .shop-input[aria-invalid=true]{border-color:#ae3240}
+.shop-editing .caption{width:min(100%,38rem)}
+.shop-editing .caption :is(#featured-title,.featured-meta){display:none}
+.edit-tile-photo{width:100%;padding:0;border:0;cursor:pointer}
+.edit-details-link{display:inline-flex;align-items:center;min-height:40px;color:var(--ink);text-decoration:underline;text-underline-offset:.2em;font-size:.86rem;font-weight:700}
+.photo-caption,.edit-photo-hit span,.shop-editing .slot[data-pos="0"]::before{position:absolute;z-index:1;left:50%;bottom:.55rem;transform:translateX(-50%);width:max-content;border:1px solid #c7ccd7;border-radius:2rem;padding:.32rem .7rem;background:#fff;color:#1b2649;font:700 .75rem/1.35 DM,system-ui,sans-serif}
+.shop-editing .slot[data-pos="0"]::before{content:'Edit photos'}
+.edit-photo-hit{position:absolute;inset:0;width:100%;cursor:pointer;background:none}
+.edit-photo-hit span{bottom:3.5rem}
+.detail-mast{position:relative}
+.detail-mast #photo-faces{position:absolute;bottom:0;left:50%;transform:translateX(-50%);z-index:2}
+.detail-mast #photo-faces button{background:white}
+.detail-mast #photo-faces button[aria-pressed=true]{background:var(--navy)}
+#photo-faces[hidden]{display:none}
+.copy-condition{padding:.8rem 0}
+.copy-condition p{color:var(--muted);font-size:.83rem;line-height:1.45}
+#editor.photos-only .form-body>:not(#capture-desk),#editor.photos-only .desk-next,#editor.photos-only .desk-heading label,#editor.photos-only #read-label{display:none}
+.shop-editing .closeup{cursor:pointer}
+.shop-editing .closeup .zoom-mark{display:none}
+@media(max-width:550px){.editable-tile .browse-edit-fields{grid-template-columns:minmax(0,1fr)}}

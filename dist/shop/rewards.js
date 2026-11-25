@@ -1,57 +1,140 @@
-(()=>{
-  const id=s=>document.getElementById(s),dialog=id('rewards-dialog'),notice=id('reward-notice');
-  let version=0, devicePass=false;
-  async function api(path='',body){
-    const r=await fetch('/api/rewards'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,cache:'no-store'});
-    const data=await r.json().catch(()=>null);
-    if(r.status===401) return {signedOut:true};
-    if(!r.ok||!data)throw new Error(data?.error||'Your pass could not be loaded. Try again.');
-    return data;
+(() => {
+  const id = name => document.getElementById(name);
+  const dialog = id('rewards-dialog');
+  const account = id('deal-dialog');
+  const notice = id('reward-notice');
+  const progress = id('reward-progress');
+  const signIn = id('reward-signin');
+  const retry = id('reward-retry');
+  const pointsLabel = count => count.toLocaleString('en-AU') + (count === 1 ? ' Lem Point' : ' Lem Points');
+  let version = 0;
+  let state = null;
+  let returnAfterSignIn = false;
+
+  async function downloadPrint(print, button) {
+    const current = version;
+    button.disabled = true;
+    notice.textContent = 'Preparing ' + print.name + '…';
+    try {
+      const response = await fetch('/api/rewards/art/' + print.id, {cache:'no-store'});
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.error || 'The print could not be downloaded. Please try again.');
+      }
+      const file = await response.blob();
+      if (version !== current) return;
+      const href = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = 'Lemrix-' + print.id + '.webp';
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 60000);
+      notice.textContent = 'Download started for ' + print.name + '.';
+    } catch (error) {
+      if (version === current) notice.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
   }
-  function render(pass){
-    devicePass=pass.devicePass===true;
-    const {points,member,prints=[]}=pass;
-    id('reward-signin').hidden=!pass.signedOut;
-    id('reward-join').hidden=!!member||!!pass.signedOut;
-    id('reward-recovery').hidden=!!member||!!pass.signedOut;
-    id('reward-join').textContent=devicePass?'Link this device’s pass to my account':'Join rewards';
-    const next=prints.find(p=>p.at>points);
-    id('reward-balance').textContent=member?points+' '+(points===1?'point':'points'):'Your collector pass';
-    if(pass.signedOut) id('reward-rule').textContent='Sign in to earn points and download member artwork. You can still check out as a guest.';
-    else if(member) id('reward-rule').textContent=(next?(next.at-points)+' more points unlock '+next.name+'.':'Your full print collection is unlocked.')+' Earn 1 point per whole AUD spent on products.';
-    else id('reward-rule').textContent=devicePass?'A previous pass is stored on this device. Link it to keep your points and artwork.':'Join for the Hill Club print. Earn 1 point per whole AUD spent on products to unlock more artwork.';
-    id('reward-prints').replaceChildren(...prints.map(print=>{
-      const card=document.createElement('article'),img=new Image(),name=document.createElement('h3'),label=document.createElement(print.available?'a':'span');
-      img.src='art/reward-'+print.id+'.webp';img.width=375;img.height=500;img.alt='';img.decoding='async';
-      name.textContent=print.name;label.textContent=print.available?'Download print':print.at?print.at+' points':'On joining';
-      if(print.available){label.href='/api/rewards/art/'+print.id;label.download='Lemrix-'+print.id+'.webp';label.setAttribute('aria-label','Download '+print.name+' print');}
-      card.append(img,name,label);return card;
-    }));
+
+  function printCard(print) {
+    const card = document.createElement('article');
+    const photo = new Image(375, 500);
+    photo.src = 'art/reward-' + print.id + '.webp';
+    photo.alt = '';
+    photo.decoding = 'async';
+    const title = document.createElement('h3');
+    title.textContent = print.name;
+    const action = document.createElement(print.available ? 'button' : 'span');
+    if (print.available) {
+      action.type = 'button';
+      action.className = 'quiet-link';
+      action.textContent = 'Download print';
+      action.setAttribute('aria-label', 'Download ' + print.name + ' print');
+      action.addEventListener('click', () => downloadPrint(print, action));
+    } else {
+      action.textContent = print.at ? pointsLabel(print.at) : 'Free with an account';
+    }
+    card.append(photo, title, action);
+    return card;
   }
-  async function perform(action,fn){
-    const v=++version;notice.textContent=action;
-    const buttons=[id('reward-join'),id('restore-pass').querySelector('button')];buttons.forEach(b=>b.disabled=true);
-    try{const state=await fn();if(version===v){render(state);notice.textContent='';}}
-    catch(e){if(version===v)notice.textContent=e.message;}
-    finally{if(version===v)buttons.forEach(b=>b.disabled=false);}
+
+  function render() {
+    if (!state) return;
+    const {member, points, prints} = state;
+    const staff = !member && window.shopEditor?.authenticated;
+    const next = member && prints.find(print => print.at > points);
+    signIn.hidden = member || staff;
+    progress.hidden = !next;
+    if (next) {
+      progress.max = next.at;
+      progress.value = points;
+      progress.setAttribute('aria-valuetext', pointsLabel(points) + ' of ' + next.at + ' for ' + next.name);
+    }
+    id('reward-balance').textContent = member ? 'Your balance · ' + pointsLabel(points) : staff ? 'Shop staff account' : 'Collect Lemrix art prints';
+    id('reward-rule').textContent = member
+      ? next ? pointsLabel(next.at - points) + ' to unlock ' + next.name + '.' : 'You’ve unlocked all three prints.'
+      : staff ? 'You’re signed in as shop staff. Customer purchases earn points when made with a customer account.'
+        : 'The Hill Club print comes with your account. Earn points on purchases to unlock the next two prints.';
+    id('reward-prints').replaceChildren(...prints.map(printCard));
   }
-  function open(){
-    if(id('deal-dialog').open)id('deal-dialog').close();
-    devicePass=false;
-    for(const element of ['reward-signin','reward-join','reward-recovery']) id(element).hidden=true;
-    id('reward-balance').textContent='';id('reward-rule').textContent='';id('reward-prints').replaceChildren();
-    id('reward-recovery').open=false;
-    id('restore-pass').reset();if(!dialog.open)dialog.showModal();
-    perform('Loading collector pass…',()=>api());
+
+  async function refresh() {
+    const current = ++version;
+    state = null;
+    signIn.hidden = progress.hidden = retry.hidden = true;
+    id('reward-balance').textContent = '';
+    id('reward-rule').textContent = '';
+    id('reward-prints').replaceChildren();
+    notice.textContent = 'Loading Lem Points…';
+    try {
+      const response = await fetch('/api/rewards', {cache:'no-store'});
+      const result = await response.json();
+      if ((!response.ok && response.status !== 401) || !Array.isArray(result.prints)) {
+        throw new Error(result.error || 'Your Lem Points could not be loaded.');
+      }
+      if (version !== current) return;
+      state = result;
+      render();
+      notice.textContent = '';
+    } catch {
+      if (version !== current) return;
+      notice.textContent = 'Your Lem Points could not be loaded. Please try again.';
+      retry.hidden = false;
+    }
   }
-  for(const button of ['rewards-open','cart-rewards','profile-rewards'])id(button).onclick=open;
-  id('reward-signin').onclick=()=>{
+
+  function open() {
+    if (account.open) account.close();
+    if (!dialog.open) dialog.showModal();
+    refresh();
+  }
+  for (const button of ['nav-rewards', 'rewards-open', 'cart-rewards', 'profile-rewards']) {
+    id(button)?.addEventListener('click', open);
+  }
+  retry.addEventListener('click', refresh);
+  signIn.addEventListener('click', () => {
+    returnAfterSignIn = true;
     dialog.close();
-    if(window.LemrixOffers?.openCustomerSignIn) window.LemrixOffers.openCustomerSignIn();
-    else id('account-opener').click();
-  };
-  id('reward-join').onclick=()=>perform('Opening your pass…',()=>api('/join',{useDevicePass:devicePass}));
-  id('restore-pass').onsubmit=e=>{e.preventDefault();perform('Restoring your pass…',()=>api('/recover',{code:e.target.elements.code.value}));};
-  window.addEventListener('lemrix-customer-session',()=>{if(dialog.open)open();});
-  dialog.addEventListener('close',()=>{version++;id('restore-pass').reset();id('reward-prints').replaceChildren();});
+    window.LemrixOffers.openCustomerSignIn();
+  });
+  account.addEventListener('close', () => { returnAfterSignIn = false; });
+  window.addEventListener('lemrix-customer-session', event => {
+    if (returnAfterSignIn && event.detail?.user) {
+      returnAfterSignIn = false;
+      queueMicrotask(open);
+    } else if (dialog.open) {
+      refresh();
+    }
+  });
+  window.addEventListener('shop-account-change', () => { if (dialog.open) render(); });
+  window.addEventListener('pageshow', event => { if (event.persisted && dialog.open) refresh(); });
+  dialog.addEventListener('close', () => {
+    if (dialog.open) return;
+    version++;
+    state = null;
+    id('reward-prints').replaceChildren();
+  });
 })();

@@ -13,6 +13,6 @@ Use Node.js 22 and run `npm ci --ignore-scripts` before building or running the 
 - `npm run build` creates the Vercel frontend and prepares the store server bundle. The static output omits the seed catalogue so the shop must load current inventory through its API.
 - `npm test` exercises staff sign-in, shop editing, Google account handling, inventory reservations, Square webhook handling and rewards with test data and sample artwork.
 
-Customer username accounts and offers that are labelled as demos remain browser-local demonstrations. Google customer sessions, staff editing, inventory, rewards and checkout use the server API. Deploying the site does not turn demo offers into submitted orders.
+Customers can sign in with a username and password or a configured identity provider. Staff review customer offers in the shop account menu. An accepted offer opens a Square checkout for one item at the agreed price plus shipping. Customers can track their offer status from any browser after signing in.
 
 The earlier storefront is available in the repository history at `d540507a2bf9bfb9c1c1253f482c2a83654b48ad`.

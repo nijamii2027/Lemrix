@@ -11,12 +11,24 @@ function checkoutMode(env) {
   return environment === 'production' ? 'live' : 'off';
 }
 
+function validDispatchDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(value + 'T00:00:00Z');
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 function forShop(item, mode) {
   const {checkoutHolds = [], ...publicItem} = item;
   const available = Math.max(0, (item.quantity ?? 0) - checkoutHolds.length);
   const demo = mode === 'test';
-  const eligible = !item.archived && mode !== 'off' && item.collection !== 'pre-orders' &&
-    (demo ? item.quantity !== 0 : available > 0);
+  const preorder = item.collection === 'pre-orders';
+  if (preorder) {
+    const todayInBrisbane = new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    publicItem.preorderOpen = validDispatchDate(item.preorderDispatch) && item.preorderDispatch >= todayInBrisbane;
+  }
+  const eligible = !item.archived && mode !== 'off' &&
+    (preorder ? publicItem.preorderOpen && Number.isInteger(item.quantity) && available > 0
+              : demo ? item.quantity !== 0 : available > 0);
   if (item.copies) publicItem.copies = item.copies.map((copy, index) => {
     const reserved = !copy.sold && !demo && checkoutHolds.some(hold => hold.copy === index);
     return {...copy, reserved, canBuy:eligible && !copy.sold && !reserved && Number.isSafeInteger(copy.cents) && copy.cents > 0};
@@ -45,7 +57,10 @@ function selectedListing(items, body, mode) {
     reject(409, 'This item or copy is unavailable. Refresh the shop to see current stock.');
   const cents = selected ? selected.cents : item.cents;
   if (cents !== body.expectedCents) reject(409, 'The price changed. Refresh to see the new price.');
-  return {item, cents, title: selected ? item.name + ' · Copy ' + String.fromCharCode(65 + body.copy) + ' · ' + selected.condition : item.name};
+  const dispatch = item.collection === 'pre-orders' ? item.preorderDispatch : undefined;
+  if (dispatch !== body.expectedDispatch) reject(409, 'Dispatch details changed. Refresh the shop and review the expected dispatch date.');
+  const title = selected ? item.name + ' · Copy ' + String.fromCharCode(65 + body.copy) + ' · ' + selected.condition : item.name;
+  return {item, cents, title:dispatch ? title + ' · Pre-order · Expected dispatch ' + dispatch : title};
 }
 function checkoutLines(body) {
   const input = body.lines === undefined ? [{...body,quantity:1}] : body.lines;
@@ -53,13 +68,16 @@ function checkoutLines(body) {
   const keys = new Set();
   return input.map(line => {
     if (!line || typeof line !== 'object') reject(400,'Invalid cart line.');
-    const {itemId,copy,expectedCents,quantity}=line;
+    const {itemId,copy,expectedCents,quantity,expectedDispatch}=line;
     const key = JSON.stringify([itemId,copy]);
     if (typeof itemId !== 'string' || !Number.isSafeInteger(expectedCents) || keys.has(key) ||
         !Number.isInteger(quantity) || quantity < 1 || quantity > 99 || (copy !== null && (!Number.isInteger(copy) || quantity !== 1)))
       reject(400,'Invalid cart line.');
+    if (expectedDispatch !== undefined && !validDispatchDate(expectedDispatch)) reject(400,'Invalid expected dispatch date.');
     keys.add(key);
-    return {itemId,copy,expectedCents,quantity};
+    const result = {itemId,copy,expectedCents,quantity};
+    if (expectedDispatch !== undefined) result.expectedDispatch = expectedDispatch;
+    return result;
   });
 }
 function priceOrder(items,lines,mode) {
@@ -69,7 +87,7 @@ function priceOrder(items,lines,mode) {
     const item = listing.item;
     const count = (requested.get(item.id) || 0) + line.quantity;
     requested.set(item.id,count);
-    if (mode === 'live' && count > item.quantity - (item.checkoutHolds?.length || 0))
+    if ((mode === 'live' || item.collection === 'pre-orders') && count > item.quantity - (item.checkoutHolds?.length || 0))
       reject(409,'The requested quantity is no longer available. Update your cart.');
     return {...line,...listing};
   });
@@ -117,7 +135,7 @@ function squareLink(env, link) {
   return {id:link.id, orderId:link.order_id, url:url.href};
 }
 
-async function prepareQuote(env, initial, request, body, origin) {
+async function prepareQuote(env, initial, request, body, origin, acceptedOffer) {
   const lines = checkoutLines(body);
   const {attempt} = body;
   let quote = await getCheckoutPart(env, attempt, 'quote');
@@ -129,6 +147,13 @@ async function prepareQuote(env, initial, request, body, origin) {
       ({items} = await getCatalogue(env, initial));
     }
     const priced = priceOrder(items, lines, checkoutMode(env));
+    if (acceptedOffer) {
+      const [line] = priced;
+      if (priced.length !== 1 || line.quantity !== 1 || line.itemId !== acceptedOffer.itemId ||
+          line.copy !== acceptedOffer.copy || acceptedOffer.cents > line.cents || acceptedOffer.cents <= 0)
+        reject(409, 'The accepted offer does not match this listing.');
+      line.cents = acceptedOffer.cents;
+    }
     const wallet = checkoutMode(env) === 'live' ? await currentPass(request, env) : null;
     const hash = body.lines ? '#cart' : '#item/' + encodeURIComponent(lines[0].itemId);
     quote = await saveCheckoutPart(env, attempt, 'quote', {
@@ -166,10 +191,10 @@ async function reserveSquareStock(env, initial, quote, link) {
     if (await getCheckoutPart(env, quote.attempt, 'closed') || await getCheckoutPart(env, quote.attempt, 'stop'))
       reject(409, 'That checkout has ended.');
     if (rows.some(item => item.checkoutHolds?.some(h => h.provider === 'square' && h.session === link.orderId))) return false;
-    for (const line of priceOrder(rows, quote.lines, 'live')) {
+    for (const [index,line] of priceOrder(rows, quote.lines, 'live').entries()) {
       const holds = line.item.checkoutHolds ||= [];
       for (let n = 0; n < line.quantity; n++) {
-        holds.push({provider:'square', session:link.orderId, attempt:quote.attempt, copy:line.copy, cents:line.cents, expires:quote.expires});
+        holds.push({provider:'square', session:link.orderId, attempt:quote.attempt, copy:line.copy, cents:quote.items[index].base_price_money.amount, expires:quote.expires});
       }
       line.item.revision++;
     }
@@ -177,8 +202,8 @@ async function reserveSquareStock(env, initial, quote, link) {
   });
 }
 
-async function startCheckout(env, initial, body, origin, request) {
-  const quote = await prepareQuote(env, initial, request, body, origin);
+async function startCheckout(env, initial, body, origin, request, acceptedOffer) {
+  const quote = await prepareQuote(env, initial, request, body, origin, acceptedOffer);
   if (await getCheckoutPart(env, quote.attempt, 'closed') || await getCheckoutPart(env, quote.attempt, 'stop'))
     reject(409, 'That checkout has ended.');
   if (quote.expires <= Date.now()/1000) reject(409, 'That checkout has expired. Start a new checkout.');
@@ -322,7 +347,7 @@ async function checkoutState(env, initial, attempt, cancel) {
         held.set(key, (held.get(key) || 0) + 1);
       }
     }
-    if (!quote.lines.every(line => held.get(JSON.stringify([line.itemId, line.copy, line.expectedCents])) === line.quantity))
+    if (!quote.lines.every((line,index) => held.get(JSON.stringify([line.itemId, line.copy, quote.items[index].base_price_money.amount])) === line.quantity))
       return {status};
   }
   return {status, url:link.url};

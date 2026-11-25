@@ -75,6 +75,9 @@ globalThis.fetch = async (url, options={}) => {
       assert.deepEqual(first.base_price_money, money(2750));
       assert.deepEqual(second.base_price_money, money(850));
       assert.equal(second.quantity, '2');
+    } else if (first.name.startsWith('Upcoming pack')) {
+      assert.match(first.name, /Pre-order · Expected dispatch 2099-07-01$/);
+      assert.deepEqual(first.base_price_money, money(1500));
     } else if (first.name === 'Penny pack') {
       assert.deepEqual(first.base_price_money, money(1));
     } else {
@@ -163,6 +166,39 @@ product.quantity=2; product.revision=1;
 const {canBuy, checkoutMode, ...savedProduct}=product;
 bucket.set('store/v1/catalogue.json',{etag:'seed',value:JSON.stringify([savedProduct])});
 env.SQUARE_ACCESS_TOKEN='live-fixture'; env.SQUARE_ENVIRONMENT='production'; env.SQUARE_SHIPPING_CENTS='800';
+// Pre-orders use an incoming allocation, preserve the dispatch terms presented to a
+// guest, and share the same atomic reservation and payment lifecycle as in-stock goods.
+const incoming = {id:'upcoming',name:'Upcoming pack',quantity:2,cents:1500,collection:'pre-orders',revision:0};
+const setIncoming = async extra => env.BUCKET.put('store/v1/catalogue.json',JSON.stringify([savedProduct,{...incoming,...extra}]));
+const incomingLine = {itemId:'upcoming',copy:null,expectedCents:1500,expectedDispatch:'2099-07-01',quantity:2};
+const preorderAttempt = (line=incomingLine) => ({...attempt(),lines:[line]});
+for (const date of ['', '2000-01-01', '2099-02-31']) {
+  await setIncoming({preorderDispatch:date});
+  assert.equal((await shop()).find(item=>item.id==='upcoming').canBuy,false);
+  assert.equal((await request('/api/checkout',preorderAttempt())).status,409);
+}
+await setIncoming({preorderDispatch:incomingLine.expectedDispatch});
+assert.equal((await shop()).find(item=>item.id==='upcoming').canBuy,true);
+assert.equal((await request('/api/checkout',preorderAttempt({...incomingLine,expectedDispatch:undefined}))).status,409);
+assert.equal((await request('/api/checkout',preorderAttempt({...incomingLine,expectedDispatch:'2099-07-02'}))).status,409);
+assert.equal((await request('/api/checkout',preorderAttempt({...incomingLine,quantity:3}))).status,409);
+const heldPreorder = preorderAttempt();
+assert.equal((await request('/api/checkout',heldPreorder)).status,200);
+assert.equal((await shop()).find(item=>item.id==='upcoming').reserved,true);
+assert.equal((await request('/api/checkout',preorderAttempt())).status,409);
+assert.equal((await request('/api/checkout/cancel',{attempt:heldPreorder.attempt})).status,200);
+assert.equal((await shop()).find(item=>item.id==='upcoming').quantity,2);
+const paidPreorder=preorderAttempt();
+assert.equal((await request('/api/checkout',paidPreorder)).status,200);
+const incomingPayment = recordPayment(orderByAttempt.get(paidPreorder.attempt));
+assert.equal((await event(incomingPayment)).status,200);
+assert.equal((await event(incomingPayment)).status,200);
+const exhausted = (await shop()).find(item=>item.id==='upcoming');
+assert.equal(exhausted.quantity,0);
+assert.equal(exhausted.canBuy,false);
+assert.equal(exhausted.reserved,false);
+console.log('Verified guest pre-orders, dispatch terms, allocation limits, reservation release and payment settlement.');
+
 // Cancel after the quote is durable but while Square is still creating its
 // link. A late response must neither expose that link nor strand any stock.
 const delayed = attempt(), gatewayFetch = globalThis.fetch;
@@ -338,6 +374,15 @@ assert.equal((await request(rewards,null,expired)).status,401);
 const oldAccount=await account('b',existingOwner), member=await account('1','google/new');
 const other=await account('2','google/other'), rival=await account('3','google/rival');
 assert.equal((await (await request(rewards,null,oldAccount)).json()).points,3);
+const memberStart = await (await request(rewards,null,member)).json();
+assert.equal(memberStart.member,true);
+assert.equal(memberStart.points,0);
+assert.deepEqual(memberStart.prints.map(print=>print.available),[true,false,false]);
+assert.equal((await request(rewards+'/art/hill-club',null,member)).status,200,'A new account can download its welcome print immediately');
+assert.equal((await request(rewards+'/art/last-showing',null,member)).status,403);
+const publicRewards=await (await request(rewards)).json();
+assert.deepEqual(publicRewards.prints.map(print=>print.available),[false,false,false]);
+
 assert.equal((await request(rewards+'/recover',{code:claimedCode},member)).status,409,'A previous owner retains their pass');
 assert.equal((await request(rewards+'/recover',{code:oldCode},oldAccount)).status,409,'An existing member cannot acquire another pass');
 const legacyDevice={cookie:other.cookie+'; '+oldCookie};
@@ -356,7 +401,8 @@ const {code}=await (await request(rewards+'/code',null,member)).json();
 assert.equal((await request(rewards+'/recover',{code:'wrong'},member)).status,400);
 assert.equal((await request(rewards+'/recover',{code},member)).status,200);
 assert.equal((await request(rewards+'/recover',{code},rival)).status,409);
-assert.equal((await request('/api/checkout',b,member)).status,200);
+const firstPurchase=await account('4','google/first-purchase');
+assert.equal((await request('/api/checkout',b,firstPurchase)).status,200,'A new account earns on the first order without opening rewards');
 const cartSession=recordPayment(orderByAttempt.get(b.attempt));
 assert.equal((await event(cartSession)).status,200);
 assert.equal((await event(cartSession)).status,200);
@@ -367,10 +413,10 @@ assert.equal(cartRows.find(p=>p.id==='soft-landing').copies[0].sold,true);
 assert.equal(cartRows.find(p=>p.id==='tide-pack').quantity,0);
 console.log('Cart checks passed for selected copies, quantities, shared shipping, atomic reservation, expiry, retries and idempotent fulfilment.');
 
-const balance=async()=>(await (await request(rewards,null,member)).json()).points;
+const balance=async()=>(await (await request(rewards,null,firstPurchase)).json()).points;
 assert.equal(await balance(),44);
-assert.equal((await request(rewards+'/art/last-showing',null,member)).status,200);
-assert.equal((await request(rewards+'/art/after-hours',null,member)).status,403);
+assert.equal((await request(rewards+'/art/last-showing',null,firstPurchase)).status,200);
+assert.equal((await request(rewards+'/art/after-hours',null,firstPurchase)).status,403);
 cartSession.refunded_money=money(1550);
 const refund={id:squareId(), order_id:cartSession.order_id, payment_id:cartSession.id, status:'COMPLETED', amount_money:money(1550)};
 assert.equal((await event(refund,true,'refund.updated')).status,200);
@@ -381,7 +427,10 @@ cartSession.refunded_money=money(cartSession.amount_money.amount);
 await event(remainingRefund,true,'refund.updated');
 await event(cartSession);
 assert.equal(await balance(),0);
-assert.equal((await request(rewards+'/art/last-showing',null,member)).status,403);
+assert.equal((await request(rewards+'/art/last-showing',null,firstPurchase)).status,403);
+assert.equal((await (await request(rewards,null,member)).json()).points,0,'Balances belong to the purchasing account');
+await env.BUCKET.put('store/v1/rewards/'+digest(claimedCode)+'.json',JSON.stringify({orders:{one:{subtotal:59},two:{subtotal:52}}}));
+assert.equal((await (await request(rewards,null,oldAccount)).json()).points,1,'Fractional spend carries forward between orders');
 console.log('Verified rewards enrolment, recovery, protected artwork, shipping exclusion, duplicate webhook protection and partial/full refunds.');
 
 // Card data and processor messages must not escape in a response or diagnostic.

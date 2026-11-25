@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-server.mjs && node scripts/build-vercel.mjs",
-    "test": "node scripts/build-server.mjs --test-art && node scripts/test-shop-editor.mjs && node scripts/test-customer.mjs && node scripts/test-checkout.mjs && node scripts/test-vercel-backend.mjs && node scripts/test-blob-bucket.mjs && node scripts/test-runtime-config.mjs && node scripts/test-vercel-gateway.mjs && node scripts/test-reward-art.mjs"
+    "test": "node scripts/build-server.mjs --test-art && node scripts/test-shop-editor.mjs && node scripts/test-customer.mjs && node scripts/test-offers.mjs && node scripts/test-checkout.mjs && node scripts/test-vercel-backend.mjs && node scripts/test-blob-bucket.mjs && node scripts/test-runtime-config.mjs && node scripts/test-vercel-gateway.mjs && node scripts/test-reward-art.mjs"
   },
   "dependencies": {
     "@vercel/blob": "2.9.0"

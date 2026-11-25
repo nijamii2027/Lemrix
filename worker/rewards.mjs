@@ -17,12 +17,8 @@ async function readPass(env, code) {
 }
 
 async function rewardAccount(request, env) {
-  const token = readCookie(request, customerCookie);
-  if (!/^[a-f0-9]{64}$/.test(token || '')) return null;
-  const object = await env.BUCKET.get(await sessionPath(token));
-  const session = object && await object.json();
-  if (!(session?.expires > Date.now()) || typeof session.user?.key !== 'string' || !session.user.key) return null;
-  return passDigest(session.user.key);
+  const user = await verifiedCustomer(request, env);
+  return typeof user?.key === 'string' && user.key ? passDigest(user.key) : null;
 }
 
 async function membershipIndex(env) {
@@ -59,18 +55,15 @@ function otherOwner(members, owner, code) {
 async function memberPass(env, members, owner) {
   const code = members[owner];
   if (!code) return null;
-  if (otherOwner(members, owner, code)) reject(409, 'This pass needs an ownership review. Contact Lemrix.');
+  if (otherOwner(members, owner, code)) reject(409, 'Please contact Lemrix about access to this rewards balance.');
   const wallet = await readPass(env, code);
-  if (!wallet) reject(503, 'Your collector pass is temporarily unavailable.');
+  if (!wallet) reject(503, 'Your Lem Points balance is temporarily unavailable.');
   return wallet;
 }
 
 async function currentPass(request, env) {
   const owner = await rewardAccount(request, env);
-  if (!owner) return null;
-  const {members} = await membershipIndex(env);
-  if (otherOwner(members, owner, members[owner])) return null;
-  return memberPass(env, members, owner);
+  return owner ? linkPass(env, owner) : null;
 }
 
 async function linkPass(env, owner, wantedCode) {
@@ -98,17 +91,22 @@ async function linkPass(env, owner, wantedCode) {
     // per pass, even if two accounts present the same old code simultaneously.
     if (await env.BUCKET.put(membershipKey, JSON.stringify(members), {onlyIf:new Headers({'If-Match':'"'+etag+'"'})})) return wallet;
   }
-  reject(503, 'Please retry linking your collector pass.');
+  reject(503, 'Please try opening your Lem Points balance again.');
 }
-function rewardView(wallet){
-  const points=wallet?Object.values(wallet.ledger.orders).reduce((sum,o)=>sum+Math.floor(Math.max(0,(o.subtotal||0)-(o.refund||0))/100),0):0;
-  return {member:!!wallet,points,prints:rewardPrints.map(p=>({...p,available:!!wallet&&points>=p.at}))};
+function rewardView(wallet, member) {
+  const orders = Object.values(wallet?.ledger.orders || {});
+  const merchandiseCents = orders.reduce((sum, order) => sum + Math.max(0, (order.subtotal || 0) - (order.refund || 0)), 0);
+  const points = Math.floor(merchandiseCents / 100);
+  return {member, points, prints:rewardPrints.map(print => ({...print, available:member && points >= print.at}))};
 }
 async function rewardsRoute(request,env,url) {
   const action=url.pathname.slice('/api/rewards'.length);
   if(request.method==='POST')requireTrustedOrigin(request,url);
   const owner = await rewardAccount(request, env);
-  if (!owner) reject(401, 'Sign in to your customer account to use Lemrix Rewards.');
+  if (!owner) {
+    if (request.method === 'GET' && action === '') return json({...rewardView(null, false), signedOut:true}, 401);
+    reject(401, 'Sign in to your customer account to use Lem Points.');
+  }
   if (request.method === 'POST' && (action === '/join' || action === '/recover')) {
     const body = await readForm(request);
     let wantedCode;
@@ -120,7 +118,7 @@ async function rewardsRoute(request,env,url) {
       if (!codePattern.test(wantedCode || '')) reject(400, 'The previous pass could not be found on this device.');
     }
     const wallet = await linkPass(env, owner, wantedCode);
-    return json(rewardView(wallet), 200, {'Set-Cookie':shopCookie(passCookie, '', 0)});
+    return json(rewardView(wallet, true), 200, {'Set-Cookie':shopCookie(passCookie, '', 0)});
   }
   if(request.method!=='GET')reject(405,'Method unavailable.');
   const {members} = await membershipIndex(env);
@@ -128,13 +126,15 @@ async function rewardsRoute(request,env,url) {
   if(action==='') {
     const code = readCookie(request, passCookie);
     const devicePass = !wallet && codePattern.test(code || '') && !otherOwner(members, owner, code) && !!await readPass(env, code);
-    return json({...rewardView(wallet), devicePass});
+    return json({...rewardView(wallet, true), devicePass});
   }
-  if(!wallet)reject(403,'Join rewards or link an existing collector pass.');
-  if(action==='/code')return json({code:wallet.code.toUpperCase().match(/.{4}/g).join('-')});
+  if(action==='/code') {
+    if(!wallet)reject(404,'No previous rewards record found.');
+    return json({code:wallet.code.toUpperCase().match(/.{4}/g).join('-')});
+  }
   const print=rewardPrints.find(p=>action==='/art/'+p.id);
   if(!print)reject(404,'Reward not found.');
-  if(rewardView(wallet).points<print.at)reject(403,'This print is still locked.');
+  if(rewardView(wallet, true).points<print.at)reject(403,'This print is still locked.');
   const fixture=rewardArtwork[print.id];
   const stored=fixture ? null : await env.BUCKET.get('store/v2/reward-art/'+print.id);
   if(!fixture && !stored)reject(503,'This print is temporarily unavailable.');

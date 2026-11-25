@@ -56,18 +56,63 @@ async function verifyCustomerToken(token, config, client, nonce) {
 async function sessionPath(raw) {
   return customerPrefix+'sessions/'+hex(await crypto.subtle.digest('SHA-256',encoder.encode(raw)));
 }
+async function customerSessionKey(request) {
+  const raw=readCookie(request,customerCookie);
+  return raw && /^[a-f0-9]{64}$/.test(raw) ? sessionPath(raw) : null;
+}
+async function verifiedCustomer(request, env) {
+  const key=await customerSessionKey(request);
+  const stored=key && await env.BUCKET.get(key);
+  const session=stored && await stored.json();
+  return session?.expires>Date.now() ? session.user : null;
+}
+async function startCustomerSession(request,env,user) {
+  const token=randomId()+randomId();
+  const expires=Date.now()+customerLifetime*1000;
+  await env.BUCKET.put(await sessionPath(token),JSON.stringify({expires,user}),{customMetadata:{expires:String(expires)}});
+  const previous=await customerSessionKey(request);
+  if(previous) await env.BUCKET.delete(previous);
+  return json({user},200,{'Set-Cookie':shopCookie(customerCookie,token,customerLifetime)});
+}
+async function passwordAccount(request,env,register) {
+  const {username,password}=await readForm(request);
+  const name=typeof username==='string' ? username.trim() : '';
+  if(!/^[A-Za-z0-9._-]{2,24}$/.test(name) || name.toLowerCase()==='lemrix')
+    reject(400,'Choose a username with 2–24 letters, numbers, dots, dashes or underscores.');
+  if(typeof password!=='string' || password.length>128 || password.length<(register?12:1))
+    reject(400,register?'Use a password with 12–128 characters.':'Enter your password.');
+  const address=String(env.CLIENT_IP || 'unknown');
+  const rateKey=hex(await crypto.subtle.digest('SHA-256',encoder.encode(address)));
+  await incrementLoginLimit(env,customerPrefix+'limits/ip/'+rateKey,40);
+  const normalized=name.toLowerCase();
+  if(normalized==='.' || normalized==='..') reject(400,'Choose another username.');
+  const key=customerPrefix+'passwords/'+normalized;
+  const user={key:'user/'+normalized,name};
+  if(register) {
+    const salt=crypto.getRandomValues(new Uint8Array(16));
+    const digest=await passwordDigest(password,salt);
+    const hash='pbkdf2-sha256$600000$'+hex(salt)+'$'+hex(digest);
+    const created=await env.BUCKET.put(key,JSON.stringify({name,hash}),{onlyIf:new Headers({'If-None-Match':'*'})});
+    if(!created) reject(409,'That username is already in use. Sign in or choose another.');
+  } else {
+    await incrementLoginLimit(env,customerPrefix+'limits/username/'+normalized,20);
+    const entry=await env.BUCKET.get(key);
+    const account=entry && await entry.json();
+    const expected=passwordParameters(account?.hash);
+    const candidate=expected || {salt:new Uint8Array(16),digest:new Uint8Array(32)};
+    if(!await verifyAdminPassword(password,candidate) || !expected) reject(401,'That username and password do not match.');
+    user.name=account.name;
+  }
+  return startCustomerSession(request,env,user);
+}
 async function customerRoute(request,env,url) {
   const action=url.pathname.slice('/api/customer/'.length);
   const method=request.method;
   if(method==='POST') requireTrustedOrigin(request,url);
-  const raw=readCookie(request,customerCookie);
-  const sessionKey=raw && /^[a-f0-9]{64}$/.test(raw) ? await sessionPath(raw) : null;
-  if(action==='session' && method==='GET') {
-    const stored=sessionKey && await env.BUCKET.get(sessionKey);
-    const session=stored && await stored.json();
-    return json({user:session?.expires>Date.now()?session.user:null});
-  }
+  if(action==='session' && method==='GET') return json({user:await verifiedCustomer(request,env)});
+  if((action==='register' || action==='login') && method==='POST') return passwordAccount(request,env,action==='register');
   if(action==='logout' && method==='POST') {
+    const sessionKey=await customerSessionKey(request);
     if(sessionKey) await env.BUCKET.delete(sessionKey);
     return json({ok:true},200,{'Set-Cookie':shopCookie(customerCookie,'',0)});
   }
@@ -76,7 +121,7 @@ async function customerRoute(request,env,url) {
     for (const [provider,config] of Object.entries(identityProviders)) {
       if (env[config.setting]) clients[provider]=env[config.setting];
     }
-    if (!Object.keys(clients).length) reject(503,'Customer sign-in is awaiting activation.');
+    if (!Object.keys(clients).length) return json({clients});
     const rawNonce=randomId()+randomId();
     const nonce=hex(await crypto.subtle.digest('SHA-256',encoder.encode(rawNonce)));
     return json({client:clients.google,clients,nonce},200,{'Set-Cookie':shopCookie(challengeCookie,rawNonce,600)});
@@ -92,10 +137,7 @@ async function customerRoute(request,env,url) {
     const user={key:action+'/'+claims.sub,name:(typeof claims.name==='string' && claims.name.trim() || claims.email).slice(0,200),email:claims.email};
     const profileKey=customerPrefix+'profiles/'+(action==='google'?'':action+'/')+claims.sub;
     await env.BUCKET.put(profileKey,JSON.stringify(user));
-    const token=randomId()+randomId();
-    await env.BUCKET.put(await sessionPath(token),JSON.stringify({expires:Date.now()+customerLifetime*1000,user}));
-    if(sessionKey) await env.BUCKET.delete(sessionKey);
-    const result=json({user},200,{'Set-Cookie':shopCookie(customerCookie,token,customerLifetime)});
+    const result=await startCustomerSession(request,env,user);
     result.headers.append('Set-Cookie',shopCookie(challengeCookie,'',0));
     return result;
   }

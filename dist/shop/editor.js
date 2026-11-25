@@ -5,6 +5,7 @@
   const staged = new Map();
   let originals = [], published = [], active = false, authenticated = false;
   let busy = false, dirty = false;
+  let photoProduct=null, newProductId='';
   let expiry, sessionEpoch = 0;
   const post = body => ({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   async function api(path, options) {
@@ -33,14 +34,14 @@
   addButton.textContent='Add product';
   addButton.onclick=()=>openEditor();
   el('edit-push').before(addButton);
-  el('edit-push').textContent='Publish changes';
+  el('edit-push').textContent='Save changes';
   function updateBar(message) {
     const count = staged.size;
     const drafts=[...staged.values()];
     const removed=drafts.filter(d=>d.remove).length;
     const invalid=drafts.find(d=>!d.remove && d.errors.size);
     const issue=invalid?(invalid.row.name||'Untitled product')+' · '+invalid.errors.values().next().value:'';
-    let summary=count ? count+' product'+(count===1?'':'s')+' staged' : 'No unpublished changes';
+    let summary=count ? count+' product'+(count===1?'':'s')+' with unsaved changes' : 'All changes saved';
     if(removed)summary+=' · '+removed+' to remove';
     const text=message || issue || summary;
     addButton.disabled=busy;
@@ -63,13 +64,19 @@
     products.splice(0,products.length,...items);
     rebuildGallery(); renderRoute();
   }
+  async function loadEditor() {
+    const files = ['set-directory.js','taxonomy.js','photo-studio.js','scan-reader.js','capture-desk.js','inline-editor.js'];
+    await Promise.all(files.map(loadShopScript));
+    desk ||= window.LemrixCapture(form);
+    inline ||= window.LemrixInlineEditor({read,write,toggleRemoval,busy:()=>busy});
+  }
   async function toggle() {
     if (!authenticated || busy) return;
     if (active) {
-      if (staged.size && !confirm('Discard staged changes and exit editing?')) return;
+      if (staged.size && !confirm('Discard unsaved changes and exit editing?')) return;
       staged.clear(); active=false; paint();
     } else {
-      try { originals=await api('items'); } catch(error) { alert(error.message); return; }
+      try { [originals]=await Promise.all([api('items'),loadEditor()]); } catch(error) { alert(error.message); return; }
       if (!authenticated || active) return;
       if (!published.length) published=structuredClone(products);
       active=true; paint();
@@ -84,21 +91,30 @@
     get active(){return authenticated && active;},
     addProduct:()=>openEditor(),
     refreshPublished(items){if(!active)published=structuredClone(items);},
+    openPhotos,
     decorateTile(item,link) {
       if(!active || !authenticated)return link;
-      const format=link.querySelector('.tile-type');
-      if(format && ![item.card?.set,item.card?.cardNumber,item.card?.language].some(Boolean))format.textContent=item.format;
       const tile=document.createElement('article');
       tile.className='editable-tile';
-      tile.append(link,inline.inventoryPanel(item,'catalogue'));
+      const art=link.querySelector('.tile-art');
+      const photo=document.createElement('button');
+      photo.type='button';photo.className='tile-art edit-tile-photo';
+      photo.setAttribute('aria-label','Edit photos for '+item.name);
+      const label=document.createElement('span');label.className='photo-caption';label.textContent='Edit photos';
+      photo.append(...art.childNodes,label);
+      photo.onclick=()=>openPhotos(item);
+      photo.disabled=!!read(item.id).remove;
+      link.className='edit-details-link';link.replaceChildren('Edit details');
+      tile.append(photo,inline.browseFields(item),link,inline.inventoryPanel(item,'catalogue'));
       if(read(item.id).remove)tile.classList.add('pending-removal');
       return tile;
     },
     renderShowroom(item) {
-      const old=el('showroom-inventory');
+      const old=el('showroom-inventory'),caption=el('featured-detail').parentElement;
+      caption.querySelector('.browse-edit-fields')?.remove();
       el('featured-detail').firstChild.textContent=active && authenticated?'Edit details ':'View item ';
       if(!active || !authenticated){old?.remove();return;}
-      el('featured-format').textContent=item.format;
+      el('featured-detail').before(inline.browseFields(item));
       const panel=inline.inventoryPanel(item,'showroom');
       panel.id='showroom-inventory';
       if(old)old.replaceWith(panel);
@@ -113,7 +129,7 @@
       setAccount(await api('account'));
     },
     async logout(all) {
-      if (busy || (staged.size && !confirm('Discard staged changes and sign out?'))) return false;
+      if (busy || (staged.size && !confirm('Discard unsaved changes and sign out?'))) return false;
       await api(all?'logout-all':'logout',post({}));
       ++sessionEpoch; staged.clear(); setAccount(null);
       if (published.length) paint();
@@ -137,7 +153,7 @@
       document.querySelector('dialog[open]') || event.target.closest('input,textarea,select,[contenteditable="true"]')) return;
     event.preventDefault(); toggle();
   });
-  const desk=window.LemrixCapture(form);
+  let desk, inline;
   // A per-product draft holds its inventory revision alongside the ordinary shop
   // model. Keep typed values separate so incomplete inputs survive navigation.
   function read(id){
@@ -189,12 +205,32 @@
     if(item!==draft.row)changeValue(item,path,value);
     updateBar();
   }
-  const inline=window.LemrixInlineEditor({read,write,toggleRemoval,busy:()=>busy});
+  function syncPreorderFields() {
+    const preorder = field('collection').value === 'pre-orders';
+    el('new-dispatch').hidden = !preorder;
+    el('new-quantity-label').textContent = preorder ? 'Pre-order allocation' : 'Stock quantity';
+  }
+  field('collection').addEventListener('change', syncPreorderFields);
+  function openPhotos(item,copyIndex=0,face='front') {
+    if(!authenticated || !active || busy || drawer.open || read(item.id).remove)return;
+    photoProduct=originals.find(row=>row.id===item.id);
+    if(!photoProduct)return;
+    form.reset();
+    form.classList.add('photos-only');form.noValidate=true;
+    desk.open(photoProduct,()=>{dirty=true;el('save').disabled=false;},copyIndex,face);
+    el('edit-title').textContent='Photos · '+item.name;
+    el('form-status').textContent='';
+    el('save').disabled=true;
+    dirty=false;drawer.showModal();
+  }
   function openEditor() {
     if (!authenticated || !active || busy || drawer.open) return;
-    form.reset();
+    photoProduct=null;newProductId=crypto.randomUUID().replaceAll('-','');
+    form.reset();form.classList.remove('photos-only');form.noValidate=false;
+    el('edit-title').textContent='Add product';
     field('category').value='Singles';
     field('collection').value='recently-added';
+    syncPreorderFields();
     const label=document.createElement('label');label.textContent='Price (AUD)';
     const input=document.createElement('input');
     Object.assign(input,{name:'price',type:'number',min:'0',max:'9999999.99',step:'.01',required:true});
@@ -209,27 +245,44 @@
     drawer.close();
   }
   drawer.addEventListener('cancel',e=>{e.preventDefault(); closeEditor();});
-  drawer.addEventListener('close',()=>{if(!drawer.open)desk.reset();});
+  drawer.addEventListener('close',()=>{if(!drawer.open)desk?.reset();});
   el('edit-close').onclick=closeEditor;
-  form.oninput=()=>{dirty=true;};
+  form.oninput=()=>{if(!photoProduct)dirty=true;};
   form.onsubmit=async event=>{
     event.preventDefault();
     if (!authenticated || !active || busy) return;
     const issue=desk.validate();
     if(issue){el('form-status').textContent=issue;return;}
-    const next=el('stage-next').checked;
-    const id=crypto.randomUUID().replaceAll('-','');
-    const row={id,create:true,quantity:field('quantity').value===''?null:Number(field('quantity').value)};
-    for(const key of ['name','category','format','description','notes','collection']) row[key]=field(key).value.trim();
-    if (!row.format) row.format=row.category==='Singles'?'Trading card':row.category;
-    row.cents=Math.round(Number(field('price').value)*100);
-    busy=true; el('save').disabled=true; el('form-status').textContent='Staging…';
+    const next=!photoProduct && el('stage-next').checked;
+    const id=newProductId;
+    let row;
+    if(photoProduct)row=structuredClone(photoProduct);
+    else {
+      row={id,create:true,quantity:field('quantity').value===''?null:Number(field('quantity').value)};
+      for(const key of ['name','category','format','description','notes','collection']) row[key]=field(key).value.trim();
+      if (row.collection === 'pre-orders') row.preorderDispatch = field('preorderDispatch').value;
+      if (!row.format) row.format=row.category==='Singles'?'Trading card':row.category;
+      row.cents=Math.round(Number(field('price').value)*100);
+    }
+    busy=true; el('save').disabled=true; el('form-status').textContent='Saving…';
     const controls=Array.from(form.elements).filter(c=>!c.disabled);
     controls.forEach(c=>c.disabled=true);
     try {
       await desk.save(row,blob=>api('images',{method:'POST',body:blob}));
       if(!authenticated || !active)return;
-      staged.set(id,{row,inputs:new Map(),errors:new Map()});
+      const saved=await api('items',post(payload({row})));
+      if(!active || !authenticated)return;
+      for(const [list,value] of [[originals,saved.item],[published,saved.listing]]){
+        const index=list.findIndex(entry=>entry.id===row.id);
+        if(index<0)list.push(value);else list[index]=value;
+      }
+      const pending=staged.get(row.id);
+      if(pending){
+        // Inline text stays unsaved. Only the committed revision and photographs change.
+        const updated=saved.item;
+        Object.assign(pending.row,{revision:updated.revision,image:updated.image,backImage:updated.backImage});
+        updated.copies?.forEach((copy,index)=>{pending.row.copies[index].photos=copy.photos;});
+      }
       dirty=false; busy=false; drawer.close(); paint(); updateBar();
       if(next) setTimeout(()=>{if(active && authenticated){openEditor();el('stage-next').checked=true;}},0);
     } catch(error){ el('form-status').textContent=error.message; }
@@ -239,13 +292,14 @@
     if(remove)return {id:row.id,revision:row.revision,remove:true};
     const {id,create,revision,image,backImage,name,description,format,category,notes,availability,collection,card}=row;
     return {id,create,revision,image,backImage,name,description,format,category,notes,availability,collection,card,
-      quantity:row.quantity??null,prices:row.copies?.map(c=>c.cents) || [row.cents],
+      preorderDispatch:row.preorderDispatch,quantity:row.quantity??null,prices:row.copies?.map(c=>c.cents) || [row.cents],
+      copyPhotos:row.copies?.some(c=>c.photos)?row.copies.map(c=>c.photos||{}):undefined,
       conditions:row.copies?.map(c=>c.condition),
       wear:row.copies?.map(c=>({front:c.front[0],back:c.back[0]}))};
   }
   el('edit-push').onclick=async()=>{
     if (!authenticated || !active || busy || !staged.size || [...staged.values()].some(d=>!d.remove && d.errors.size)) return;
-    busy=true; updateBar('Publishing…');
+    busy=true; updateBar('Saving…');
     const enabled=[...document.querySelectorAll('.shop-input:enabled,.inventory-panel button:enabled')];
     enabled.forEach(input=>input.disabled=true);
     try {
@@ -259,7 +313,7 @@
     sessionStorage.removeItem('lemrix.shop.pushed');
     window.addEventListener('shop-account-change',async function resume(){
       window.removeEventListener('shop-account-change',resume);
-      if(authenticated){await toggle();updateBar('Changes published');}
+      if(authenticated){await toggle();updateBar('Changes saved');}
     });
   }
   window.addEventListener('beforeunload',event=>{

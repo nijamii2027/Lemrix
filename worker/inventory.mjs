@@ -3,6 +3,36 @@ const imagePrefix = 'store/v1/images/';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const categories = new Set(['Singles', 'Packs', 'Accessories']);
+const taxonomyKey = 'store/v1/taxonomy.json';
+const taxonomyLimits = {category:60, set:120, series:100, grader:24, language:40, itemCondition:80};
+async function taxonomyRoute(request, env) {
+  if (request.method === 'GET') {
+    const saved = await env.BUCKET.get(taxonomyKey);
+    return json(saved ? await saved.json() : {});
+  }
+  const {field, value:raw} = await readForm(request, 2048);
+  if (typeof field !== 'string' || !Object.hasOwn(taxonomyLimits, field) || !isText(raw, taxonomyLimits[field])) reject(400, 'Enter a valid choice.');
+  const value = raw.normalize('NFKC').trim();
+  if (!value || value.length > taxonomyLimits[field] || /[\u0000-\u001f\u007f]/u.test(value) || value === '__lemrix_add_choice__') reject(400, 'Enter a valid choice.');
+  if (field === 'category' && ['all items','saved','pre-orders','recently-added','recently added','pre orders','browse sets','rewards','lem points'].includes(value.toLowerCase())) reject(400, 'This name is already used in the shop navigation.');
+  for (let attempt=0; attempt<4; attempt++) {
+    const saved = await env.BUCKET.get(taxonomyKey);
+    const options = saved ? await saved.json() : {};
+    const current = options[field] || [];
+    if (current.some(name => name.toLowerCase() === value.toLowerCase())) return json(options);
+    if (current.length >= 1000) reject(400, 'This dropdown has reached its maximum of 1,000 custom choices.');
+    options[field] = [...current, value];
+    const onlyIf = new Headers(saved ? {'If-Match':'"'+saved.etag+'"'} : {'If-None-Match':'*'});
+    if (await env.BUCKET.put(taxonomyKey, JSON.stringify(options), {onlyIf, httpMetadata:{contentType:'application/json'}})) return json(options);
+  }
+  reject(409, 'Another choice was added at the same time. Please try again.');
+}
+async function validListingCategory(value, old, env) {
+  if (!isText(value, taxonomyLimits.category)) return false;
+  if (categories.has(value) || value === old?.category) return true;
+  const saved = await env.BUCKET.get(taxonomyKey);
+  return saved ? Boolean((await saved.json()).category?.includes(value)) : false;
+}
 const photoPath = /^\/media\/([a-f0-9]{32})$/;
 const errors = {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
 class FormError extends Error {
@@ -78,7 +108,7 @@ async function applyListing(items,body,env) {
     old.revision++;
     return old.id;
   }
-  if (!isText(body.name,100) || !isText(body.description,3000) || !categories.has(body.category) || (body.quantity !== null && !quantity(body.quantity,1000000))) reject(400,'Check the name, description, category and stock quantity.');
+  if (!isText(body.name,100) || !isText(body.description,3000) || !(await validListingCategory(body.category, old, env)) || (body.quantity !== null && !quantity(body.quantity,1000000))) reject(400,'Check the name, description, category and stock quantity.');
   if (!old || body.image !== old.image) {
     const match = typeof body.image==='string' && body.image.match(photoPath);
     if (!match || !(await env.BUCKET.head(imagePrefix+match[1]))) reject(400, 'Upload a product image.');
@@ -98,6 +128,13 @@ async function applyListing(items,body,env) {
     if (!['','pre-orders','recently-added'].includes(body.collection)) reject(400,'Unknown collection.');
     next.collection = body.collection;
   }
+  if (next.collection === 'pre-orders') {
+    if (body.preorderDispatch !== undefined && body.preorderDispatch !== '' && !validDispatchDate(body.preorderDispatch))
+      reject(400, 'Choose a valid expected dispatch date.');
+    if (body.preorderDispatch !== undefined) next.preorderDispatch = body.preorderDispatch;
+  } else delete next.preorderDispatch;
+  if (old?.checkoutHolds?.length && ((next.collection === 'pre-orders') !== (old.collection === 'pre-orders') ||
+      next.preorderDispatch !== old.preorderDispatch)) reject(409, 'Wait for active checkouts to end before changing dispatch terms.');
   if (body.card!==undefined) {
     if (!body.card || typeof body.card!=='object' || Array.isArray(body.card)) reject(400,'Invalid collector details.');
     const card={};
@@ -141,14 +178,20 @@ async function applyListing(items,body,env) {
   else items.push(next);
   return next.id;
 }
-async function saveListings(changes,env,initial) {
+async function saveListings(changes,env,initial,single=false) {
   if (!Array.isArray(changes) || !changes.length || changes.length > 100) reject(400,'Push between 1 and 100 products at once.');
   for (let attempt=0; attempt<4; attempt++) {
     const {items,etag}=await getCatalogue(env,initial);
     const ids=[];
     for (const change of changes) ids.push(await applyListing(items,change,env));
     const onlyIf=new Headers(etag ? {'If-Match':'"'+etag+'"'} : {'If-None-Match':'*'});
-    if (await env.BUCKET.put(catalogueKey,JSON.stringify(items),{onlyIf,httpMetadata:{contentType:'application/json'}})) return json({id:ids[0],ids});
+    if (await env.BUCKET.put(catalogueKey,JSON.stringify(items),{onlyIf,httpMetadata:{contentType:'application/json'}})) {
+      if(single){
+        const item=items.find(entry=>entry.id===ids[0]);
+        return json({id:item.id,ids,item,listing:forShop(item,checkoutMode(env))});
+      }
+      return json({id:ids[0],ids});
+    }
   }
   reject(409,'Another change is being saved. Try again.');
 }
@@ -160,10 +203,12 @@ export async function handleInventory(request, env, initial) {
     if (path.startsWith('/api/')) {
       const methods = {
         '/api/login':['POST'], '/api/logout':['POST'], '/api/logout-all':['POST'], '/api/account':['GET'],
-        '/api/items':['GET','POST'], '/api/items/push':['POST'], '/api/images':['POST'],
-        '/api/customer/session':['GET'], '/api/customer/challenge':['POST'], '/api/customer/google':['POST'], '/api/customer/apple':['POST'], '/api/customer/logout':['POST'],
+        '/api/items':['GET','POST'], '/api/taxonomy':['GET','POST'], '/api/items/push':['POST'], '/api/images':['POST'],
+        '/api/customer/session':['GET'], '/api/customer/login':['POST'], '/api/customer/register':['POST'], '/api/customer/challenge':['POST'], '/api/customer/google':['POST'], '/api/customer/apple':['POST'], '/api/customer/logout':['POST'],
         '/api/rewards':['GET'], '/api/rewards/code':['GET'], '/api/rewards/join':['POST'], '/api/rewards/recover':['POST'],
         '/api/rewards/art/hill-club':['GET'], '/api/rewards/art/last-showing':['GET'], '/api/rewards/art/after-hours':['GET'],
+        '/api/offers/list':['POST'], '/api/offers/lookup':['POST'], '/api/offers/submit':['POST'], '/api/offers/checkout':['POST'],
+        '/api/staff/offers/list':['POST'], '/api/staff/offers/review':['POST'],
         '/api/checkout':['POST'], '/api/checkout/status':['POST'], '/api/checkout/cancel':['POST'], '/api/square/webhook':['POST'],
       }[path];
       if (!methods) reject(404, 'Unknown route.');
@@ -171,6 +216,7 @@ export async function handleInventory(request, env, initial) {
     }
     if (!env.BUCKET) reject(503,'Inventory storage is unavailable.');
     if (path==='/api/rewards'||path.startsWith('/api/rewards/')) return await rewardsRoute(request,env,url);
+    if (path.startsWith('/api/offers/')) return await offerRoute(request,env,initial,url);
     if (path.startsWith('/api/customer/')) return await customerRoute(request,env,url);
     if (['/api/checkout','/api/checkout/status','/api/checkout/cancel','/api/square/webhook'].includes(path)) {
       return await checkoutRoute(request, env, initial, url);
@@ -198,12 +244,14 @@ export async function handleInventory(request, env, initial) {
     if (path==='/api/login' && request.method==='POST') return await adminLogin(request,env);
     const session=await sessionId(request,env);
     if (!session) reject(401,'Sign in required');
+    if (path.startsWith('/api/staff/offers/')) return await offerRoute(request,env,initial,url,true);
     if (path==='/api/account' && request.method==='GET') return json({username:adminUsername,expires:session.expires});
     if ((path==='/api/logout' || path==='/api/logout-all') && request.method==='POST') {
       return await adminLogout(env,session,path==='/api/logout-all');
     }
+    if (path==='/api/taxonomy') return await taxonomyRoute(request, env);
     if (path==='/api/items' && request.method==='GET') return json((await getCatalogue(env,initial)).items.filter(item => !item.archived));
-    if (path==='/api/items' && request.method==='POST') return await saveListings([await readForm(request)],env,initial);
+    if (path==='/api/items' && request.method==='POST') return await saveListings([await readForm(request)],env,initial,true);
     if (path==='/api/items/push' && request.method==='POST') return await saveListings((await readForm(request,1024*1024)).changes,env,initial);
     if (path==='/api/images' && request.method==='POST') {
       const data=await readBody(request,5*1024*1024), mime=recognizedImage(data);

@@ -82,9 +82,13 @@ async function limitAdminLogin(env) {
   await incrementLoginLimit(env, adminRatePrefix + 'global', 300);
 }
 
-async function verifyAdminPassword(candidate, expected) {
+async function passwordDigest(candidate, salt) {
   const key = await crypto.subtle.importKey('raw', encoder.encode(candidate), 'PBKDF2', false, ['deriveBits']);
-  const actual = new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2', hash:'SHA-256', iterations:600000, salt:expected.salt}, key, 256));
+  return new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2', hash:'SHA-256', iterations:600000, salt}, key, 256));
+}
+
+async function verifyAdminPassword(candidate, expected) {
+  const actual = await passwordDigest(candidate, expected.salt);
   let different = 0;
   for (let index = 0; index < expected.digest.length; index++) different |= actual[index] ^ expected.digest[index];
   return different === 0;

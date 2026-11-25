@@ -3,10 +3,18 @@ import {generateKeyPairSync, sign} from 'node:crypto';
 import worker from '../dist/server/index.js';
 
 const records = new Map();
+let version=0;
 const origin='https://shop.example';
 const env={GOOGLE_CLIENT_ID:'fixture.apps.googleusercontent.com', BUCKET:{
-  async put(key, value){records.set(key,value);},
-  async get(key){return records.has(key)?{json:async()=>JSON.parse(records.get(key))}:null;},
+  async put(key,value,{onlyIf}={}) {
+    const entry=records.get(key);
+    if(onlyIf?.has('If-None-Match') && entry) return null;
+    if(onlyIf?.has('If-Match') && onlyIf.get('If-Match')!=='"'+entry?.etag+'"') return null;
+    const saved={value,etag:String(++version)};
+    records.set(key,saved);
+    return saved;
+  },
+  async get(key){const entry=records.get(key);return entry?{etag:entry.etag,json:async()=>JSON.parse(entry.value)}:null;},
   async delete(key){records.delete(key);}
 }};
 function request(action, body, cookie='', from=origin) {
@@ -48,7 +56,7 @@ assert.equal((await (await request('session',undefined,session)).json()).user,nu
 const second=await request('google',credential(),cookie);
 assert.equal((await second.json()).user.key,profile.key);
 delete env.GOOGLE_CLIENT_ID;
-assert.equal((await request('challenge',{})).status,503);
+assert.deepEqual(await (await request('challenge',{})).json(),{clients:{}});
 console.log('Passed Google signature and claims checks, account creation and reuse, session restoration, sign-out, and missing configuration.');
 
 env.APPLE_CLIENT_ID='au.com.lemrix.shop';
@@ -74,3 +82,24 @@ assert.equal((await (await request('session',undefined,appleSession)).json()).us
 assert.equal(records.has('store/v1/customers/profiles/apple/'+appleClaims.sub),true);
 assert.equal(records.has('store/v1/customers/profiles/12345'),true);
 console.log('Verified Apple identity tokens, provider-scoped accounts and session restoration.');
+
+const native={username:'Test.Member',password:'a suitably long passphrase'};
+const signup=await request('register',native);
+assert.equal(signup.status,200);
+const signupCookie=signup.headers.get('Set-Cookie').split(';')[0];
+const nativeUser={key:'user/test.member',name:'Test.Member'};
+assert.deepEqual(await signup.json(),{user:nativeUser});
+assert.deepEqual(await (await request('session',undefined,signupCookie)).json(),{user:nativeUser});
+assert.equal((await request('register',{...native,username:'test.member'})).status,409);
+assert.equal((await request('login',{...native,password:'wrong'})).status,401);
+assert.equal((await request('register',{...native,username:'Lemrix'})).status,400);
+assert.equal((await request('register',{...native,username:'..'})).status,400);
+assert.equal((await request('register',{...native,username:'Tester',password:'short'})).status,400);
+assert.equal((await request('login',native,'','https://other.example')).status,403);
+const relogin=await request('login',{...native,username:'test.member'},signupCookie);
+assert.deepEqual(await relogin.json(),{user:nativeUser});
+assert.deepEqual(await (await request('session',undefined,signupCookie)).json(),{user:null});
+const newCookie=relogin.headers.get('Set-Cookie').split(';')[0];
+assert.equal((await request('logout',{},newCookie)).status,200);
+assert.deepEqual(await (await request('session',undefined,newCookie)).json(),{user:null});
+console.log('Verified persistent username accounts, duplicate and reserved names, credentials, session rotation and sign-out.');

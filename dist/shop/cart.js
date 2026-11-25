@@ -24,12 +24,25 @@ window.LemrixCart = (() => {
   }
   read();
   const count = () => lines.reduce((n,l) => n+l.quantity,0);
+  const dispatchFormatter = new Intl.DateTimeFormat('en-AU', {day:'numeric', month:'short', year:'numeric', timeZone:'UTC'});
+  function dispatchLabel(item) {
+    if (!item?.preorderOpen || !item.preorderDispatch) return '';
+    return dispatchFormatter.format(new Date(item.preorderDispatch + 'T00:00:00Z'));
+  }
+  function preorderStatus(item) {
+    if (!item.preorderOpen || !Number.isInteger(item.quantity)) return 'Pre-orders closed';
+    if (item.reserved) return 'Pre-order allocation reserved';
+    if (!(item.quantity > 0) || item.copies?.every(copy => copy.sold)) return 'Pre-order allocation sold out';
+    if (item.checkoutMode === 'off') return 'Online checkout unavailable';
+    if (!item.canBuy) return 'Pre-orders closed';
+    return 'Pre-order';
+  }
   // Use the same public Square eligibility for a specific listing everywhere.
   function availability(item, copy) {
     const listing = item && (item.copies ? item.copies[copy] : copy === null ? item : null);
     let reason = '';
     if (!listing) reason = 'Listing no longer available';
-    else if (item.collection === 'pre-orders') reason = 'Pre-order preview';
+    else if (item.collection === 'pre-orders' && preorderStatus(item) !== 'Pre-order') reason = preorderStatus(item);
     else if (listing.sold) reason = 'Sold out';
     else if (listing.reserved || item.reserved) reason = 'Temporarily reserved';
     else if (item.quantity === 0) reason = 'Sold out';
@@ -43,6 +56,8 @@ window.LemrixCart = (() => {
     const quantities = new Map();
     const rows = lines.map(line => {
       const row = availability(find(line.itemId), line.copy);
+      if (!row.reason && line.expectedDispatch !== (row.item.collection === 'pre-orders' ? row.item.preorderDispatch : undefined))
+        row.reason = 'Dispatch details changed. Remove this item and add it again to confirm.';
       if (!row.reason) quantities.set(line.itemId, (quantities.get(line.itemId) || 0) + line.quantity);
       return {...row, line};
     });
@@ -71,8 +86,11 @@ window.LemrixCart = (() => {
   function contains(id,copy) { return lines.some(l => matches(l,id,copy)); }
   function add(id,copy) {
     if (contains(id,copy)) { location.hash='cart'; return; }
-    if (availability(find(id),copy).reason) return;
-    lines.push({itemId:id,copy,quantity:1});
+    const item = find(id);
+    if (availability(item,copy).reason) return;
+    const line = {itemId:id,copy,quantity:1};
+    if (item.collection === 'pre-orders') line.expectedDispatch = item.preorderDispatch;
+    lines.push(line);
     commit();
   }
   function text(tag,content,cls) {
@@ -103,6 +121,8 @@ window.LemrixCart = (() => {
       const info=document.createElement('div');
       const meta=listing && item.copies ? 'Copy '+String.fromCharCode(65+line.copy)+' · '+listing.condition : item?.format;
       info.append(link,text('p',meta||'Removed from the catalogue.'));
+      if (line.expectedDispatch && item?.collection === 'pre-orders' && dispatchLabel(item))
+        info.append(text('small', 'Pre-order · ' + (item.checkoutMode==='test'?'Test checkout':'Pay now') + ' · Expected dispatch ' + dispatchLabel(item)));
       if (reason) info.append(text('small', reason));
       const edit=document.createElement('div'); edit.className='cart-controls';
       if(listing && line.copy===null && max>0){
@@ -129,7 +149,7 @@ window.LemrixCart = (() => {
     byId('cart-note').textContent=order.length>50?'Choose up to 50 listings per checkout.':
       mixed?'Only available items are included in the subtotal and checkout. Other items stay in your cart.':
       order.length?'Ships within Australia. Shipping is shown at Square checkout.':
-      rows.length===1?(rows[0].reason==='Pre-order preview'?'This pre-order preview is not open for purchase.':rows[0].reason.replace(/\.?$/,'.')):
+      rows.length===1?rows[0].reason.replace(/\.?$/,'.'):
       'Each unavailable item is marked below its name.';
   }
   function open() {
@@ -181,5 +201,5 @@ window.LemrixCart = (() => {
   window.addEventListener('storage',e=>{
     if(e.key===key || e.key===null){read();refresh();window.dispatchEvent(new Event('lemrix-cart-change'));}
   });
-  return {add,contains,open,refresh,complete,message,availability};
+  return {add,contains,open,refresh,complete,message,availability,dispatchLabel,preorderStatus};
 })();

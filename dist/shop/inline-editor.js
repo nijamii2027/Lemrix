@@ -1,7 +1,6 @@
 // Native form controls take the place of the corresponding shop text in owner edit mode.
 window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemoval, busy}) {
   const el=id=>document.getElementById(id);
-  const categories=['Singles','Packs','Accessories'];
   const cardFields=[
     ['set','Set',120],['series','Era',100],['cardNumber','Number',35],
     ['language','Language',40],['year','Year',4],['grader','Grader',24],
@@ -29,7 +28,9 @@ window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemo
   document.fonts?.addEventListener('loadingdone',reflow);
   function control(item,path,label,value,options={}) {
     const {options:choices,multiline=false,numeric,required=false,max=3000,placeholder=''}=options;
-    const input=document.createElement(choices?'select':multiline?'textarea':'input');
+    const fieldName=path.replace(/^card\./,'');
+    const taxonomy=window.LemrixTaxonomy.has(fieldName);
+    const input=document.createElement(choices || taxonomy?'select':multiline?'textarea':'input');
     input.className='shop-input';
     input.dataset.shopField=path;
     input.setAttribute('aria-label',label);
@@ -38,13 +39,15 @@ window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemo
         const [key,text]=Array.isArray(choice)?choice:[choice,choice];
         input.add(new Option(text,key));
       }
-    }else{
+    }else if(!taxonomy){
       input.maxLength=max;input.required=required;input.placeholder=placeholder;
       if(numeric)input.inputMode=numeric==='price'?'decimal':'numeric';
       if(multiline)input.rows=1;
     }
     const model=read(item.id);
-    input.value=model.inputs?.get(path)??value??'';
+    const current = model.inputs?.get(path)??value??'';
+    if(taxonomy)window.LemrixTaxonomy.attach(input,fieldName,current);
+    else input.value=current;
     input.disabled=busy() || Boolean(model.remove);
     const issue=()=>{
       const raw=input.value.trim();
@@ -74,16 +77,21 @@ window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemo
       else if(numeric==='stock')normalized=!raw.trim()||message?null:Number(raw);
       else if(options.defaultText && raw.trim()===options.defaultText)normalized='';
       write(item,path,raw,normalized,message);
-      if(path==='quantity' || path==='collection')syncInventory(item);
+      if(['quantity','collection','preorderDispatch'].includes(path))syncInventory(item);
       if(path.startsWith('copies.'))syncCopyOption(item,path);
     };
-    input.addEventListener(choices?'change':'input',edit);
+    input.addEventListener(choices || taxonomy?'change':'input',edit);
     if(multiline)requestAnimationFrame(size);else size();
     return input;
   }
   function inventoryStatus(row) {
     const held=row.checkoutHolds?.length || 0;
-    if(row.collection==='pre-orders')return 'Pre-order preview';
+    if(row.collection==='pre-orders'){
+      const todayInBrisbane = new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      if(!row.preorderDispatch || row.preorderDispatch < todayInBrisbane)return 'Pre-orders closed · Set a current dispatch date';
+      const unsold=row.copies?.filter(copy=>!copy.sold).length ?? row.quantity;
+      return Math.max(0,Math.min(row.quantity,unsold)-held)+' available to pre-order'+(held?' · '+held+' held':'');
+    }
     if(row.quantity==null)return 'Stock unset';
     if(!row.quantity)return 'Sold out';
     const physical=row.copies ? row.copies.filter(copy=>!copy.sold).length : row.quantity;
@@ -95,7 +103,12 @@ window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemo
     if(!row)return;
     const selector='[data-product-id="'+CSS.escape(item.id)+'"]';
     for(const panel of document.querySelectorAll('.inventory-panel'+selector)){
-      panel.querySelector('.inventory-status').textContent=model.remove?'Removal staged':inventoryStatus(row);
+      panel.querySelector('.inventory-status').textContent=model.remove?'Pending removal':inventoryStatus(row);
+      const isPreorder=row.collection==='pre-orders';
+      const quantityLabel=panel.querySelector('.inventory-quantity span');
+      if(quantityLabel)quantityLabel.textContent=isPreorder?'Pre-order allocation':'Stock on hand';
+      const dispatch=panel.querySelector('.inventory-dispatch');
+      if(dispatch)dispatch.hidden=!isPreorder;
       const list=panel.querySelector('.inventory-promote');
       if(list)list.hidden=row.collection!=='pre-orders' || !(row.quantity>0) || !!model.remove;
       const undo=panel.querySelector('.inventory-remove');
@@ -119,7 +132,7 @@ window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemo
     panel.addEventListener('keydown',event=>event.stopPropagation());
     const status=document.createElement('span');
     status.className='inventory-status';
-    status.textContent=model.remove?'Removal staged':inventoryStatus(row);
+    status.textContent=model.remove?'Pending removal':inventoryStatus(row);
     const actions=document.createElement('div');
     actions.className='inventory-actions';
     const remove=document.createElement('button');
@@ -136,11 +149,19 @@ window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemo
     const stockLabel=document.createElement('label');
     stockLabel.className='inventory-quantity';
     const stock=control(item,'quantity','Stock quantity for '+row.name,row.quantity,{numeric:'stock',max:8,placeholder:'Unset'});
-    stockLabel.append('Stock on hand',stock);
+    const quantityCaption=document.createElement('span');
+    quantityCaption.textContent=row.collection==='pre-orders'?'Pre-order allocation':'Stock on hand';
+    stockLabel.append(quantityCaption,stock);
+    const dispatchLabel=document.createElement('label');
+    dispatchLabel.className='inventory-dispatch';
+    dispatchLabel.hidden=row.collection!=='pre-orders';
+    const dispatch=control(item,'preorderDispatch','Expected dispatch date for '+row.name,row.preorderDispatch);
+    dispatch.type='date';
+    dispatchLabel.append('Expected dispatch',dispatch);
     const promote=document.createElement('button');
     promote.type='button';promote.className='inventory-promote';
-    promote.textContent='List for sale';
-    promote.title='Move this product from pre-order previews to the main collection when you publish.';
+    promote.textContent='Move to in stock';
+    promote.title='Use once the remaining allocation has arrived. The remaining units become stock on hand.';
     promote.hidden=row.collection!=='pre-orders' || !(row.quantity>0);
     promote.disabled=busy();
     promote.onclick=()=>{
@@ -152,7 +173,7 @@ window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemo
       stock.focus();
     };
     actions.append(promote,remove);
-    panel.append(stockLabel,status,actions);
+    panel.append(stockLabel,dispatchLabel,status,actions);
     return panel;
   }
   function syncCopyOption(item,path){
@@ -161,6 +182,23 @@ window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemo
     if(!label)return;
     if(property==='condition')label.querySelector('span').textContent=item.copies[index].condition;
     if(property==='cents')label.querySelector('small').textContent=price(item.copies[index].cents);
+  }
+  function browseFields(item) {
+    const row=read(item.id).row;
+    const wrap=document.createElement('div');
+    wrap.className='browse-edit-fields';
+    const add=(path,label,value,settings={})=>{
+      const group=document.createElement('label');
+      group.append(label,control(item,path,label,value,settings));
+      wrap.append(group);
+    };
+    add('name','Product name',row.name,{required:true,max:100});
+    add('format','Format',row.format,{max:100});
+    (row.copies || [row]).forEach((copy,index)=>{
+      const label=row.copies?copyName(index)+' price (AUD)':'Price (AUD)';
+      add(row.copies?'copies.'+index+'.cents':'cents',label,copy.cents==null?'':(copy.cents/100).toFixed(2),{numeric:'price',required:true,max:16});
+    });
+    return wrap;
   }
   function priceField(item,index=null){
     const row=read(item.id).row;
@@ -173,6 +211,11 @@ window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemo
     priceField(item,index);
     el('copy-heading').replaceChildren(copyName(index)+' · ',control(item,'copies.'+index+'.condition','Copy condition',copy.condition,{required:true,max:80}));
     el('wear-note').replaceChildren(control(item,'copies.'+index+'.'+face,'Condition notes for '+face,copy[face]?.[0],{multiline:true,max:500,placeholder:'Add condition notes'}));
+    const backNote=el('back-wear-note');
+    if(!copy.photos?.back && !(index===0 && item.backImage)){
+      backNote.hidden=false;
+      backNote.replaceChildren(control(item,'copies.'+index+'.back','Back condition notes',copy.back?.[0],{multiline:true,max:500,placeholder:'Add back condition notes'}));
+    }
   }
   function renderFacts(item) {
     const row=read(item.id).row,card=row.card||{},dl=el('card-facts');
@@ -203,7 +246,7 @@ window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemo
   function detail(item,defaultAvailability) {
     const row=read(item.id).row;
     const family=el('detail-family');const currency=family.textContent.split(' / ')[1] || 'AUD';
-    family.replaceChildren(control(item,'category','Product category',row.category,{options:categories}),' / '+currency);
+    family.replaceChildren(control(item,'category','Product category',row.category,{required:true}),' / '+currency);
     el('detail-name').replaceChildren(control(item,'name','Product name',row.name,{max:100,required:true,multiline:true}));
     const count=document.createElement('span');count.id='inline-stock-count';
     el('detail-format').replaceChildren(control(item,'format','Product format',row.format,{max:100,placeholder:'Format'}),count);
@@ -224,5 +267,5 @@ window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemo
     else el('detail').querySelector('.detail-heading').after(panel);
     renderFacts(item);
   }
-  return {detail,renderCopy,renderFacts,inventoryPanel};
+  return {detail,renderCopy,renderFacts,inventoryPanel,browseFields};
 };

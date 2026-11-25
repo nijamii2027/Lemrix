@@ -4,28 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f8f8f6">
-  <meta name="description" content="Explore the Lemrix TCG shop preview. Browse pack, card and accessory concepts in the showroom or catalogue.">
+  <meta name="description" content="Shop trading cards, packs and accessories from Lemrix TCG. Browse the showroom or catalogue and see prices in Australian dollars.">
   <title>The shop · Lemrix TCG</title>
   <link rel="icon" href="../assets/lemrix-logo.webp" type="image/webp">
   <link rel="preload" href="../assets/dm-sans-700.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="art/tide-pack.webp" as="image">
   <script src="../motion.js"></script>
   <link rel="stylesheet" href="shop.css">
   <link rel="stylesheet" href="offers.css">
   <link rel="stylesheet" href="../store-transition.css">
   <script src="../store-transition.js"></script>
-  <script defer src="catalogue.js"></script>
+  <script>window.products = [];</script>
+  <script defer src="catalogue.js" onerror="window.catalogueLoadFailed = true"></script>
   <script defer src="offers.js"></script>
-  <script defer src="set-directory.js"></script>
   <script defer src="collection.js"></script>
   <script defer src="rewards.js"></script>
   <script defer src="logo-peek.js"></script>
   <script defer src="cart.js"></script>
   <script defer src="shop.js"></script>
-  <script defer src="photo-studio.js"></script>
-  <script defer src="scan-reader.js"></script>
-  <script defer src="capture-desk.js"></script>
-  <script defer src="inline-editor.js"></script>
   <script defer src="editor.js"></script>
   <link rel="stylesheet" href="editor.css">
   <link rel="stylesheet" href="collectors.css">
@@ -34,7 +29,10 @@
 <body>
   <a class="skip" href="#main">Skip to collection</a>
   <header class="mast">
-    <a class="back-link" id="back-link" href="../" aria-label="Back to Lemrix home" title="Back to Lemrix home"><i class="mark arrow left" aria-hidden="true"></i></a>
+    <nav class="shop-shortcuts" aria-label="Shop shortcuts">
+      <a class="back-link" id="back-link" href="../" aria-label="Back to Lemrix home" title="Back to Lemrix home"><i class="mark arrow left" aria-hidden="true"></i></a>
+      <button type="button" id="nav-rewards" aria-haspopup="dialog">Lem Points</button>
+    </nav>
     <nav class="wordmark-row" aria-label="Site navigation">
       <a class="side-link" href="../#stream">Streams</a>
       <a class="wordmark" href="./" aria-label="Lemrix TCG shop"><img data-store-emblem src="../assets/lemrix-wordmark.webp" alt="" fetchpriority="high"></a>
@@ -60,18 +58,18 @@
   <main id="main" tabindex="-1">
     <section id="browse" aria-label="Shop collection">
       <aside class="rail" aria-label="Collection filters">
-        <span class="rail-label" id="shop-mode">Demo shop · Sample AUD prices</span>
+        <span class="rail-label" id="shop-mode">Lemrix shop · AUD</span>
         <nav id="categories" aria-label="Categories">
           <button type="button" data-category="All items" aria-pressed="true">All items</button>
-          <button type="button" data-category="Packs" aria-pressed="false">Packs</button>
+          <button type="button" data-category="recently-added" aria-pressed="false">Recently added</button>
           <button type="button" data-category="Singles" aria-pressed="false">Singles</button>
+          <button type="button" data-category="Packs" aria-pressed="false">Packs</button>
           <button type="button" data-category="Accessories" aria-pressed="false">Accessories</button>
         </nav>
         <div class="collection-links" aria-label="Featured collections" role="group">
-          <a href="#collection/recently-added" data-collection="recently-added">Recently added</a>
-          <a href="#collection/pre-orders" data-collection="pre-orders">Pre-orders</a>
           <button type="button" id="sets-open" aria-haspopup="dialog">Browse sets</button>
-          <button type="button" id="rewards-open" aria-haspopup="dialog">Rewards</button>
+          <a href="#collection/pre-orders" data-collection="pre-orders">Pre-orders</a>
+          <button type="button" id="rewards-open" aria-haspopup="dialog">Rewards<small class="points-rate">AUD $1 = 1 Lem Point</small></button>
         </div>
       </aside>
       <div class="view-switch" role="group" aria-label="Collection view">
@@ -81,13 +79,13 @@
       <div id="showroom">
         <div class="gallery" id="gallery" role="group" aria-label="Product carousel. Scroll, swipe, or use the arrow keys to browse." tabindex="0"></div>
         <div class="caption">
-          <h1 id="featured-title">Tide Pool</h1>
-          <p class="featured-meta"><span id="featured-format">Illustrated booster pack</span><strong id="featured-price">AUD 8.50</strong></p>
-          <a id="featured-detail" class="action" href="#item/tide-pack">View item <i class="mark arrow" aria-hidden="true"></i></a>
+          <h1 id="featured-title">Loading collection…</h1>
+          <p class="featured-meta"><span id="featured-format"></span><strong id="featured-price"></strong></p>
+          <a id="featured-detail" class="action" href="#catalogue">View item <i class="mark arrow" aria-hidden="true"></i></a>
         </div>
         <div class="pager" role="group" aria-label="Browse featured items">
           <button id="prev" class="circle-button" type="button" aria-label="Previous item"><i class="mark arrow left" aria-hidden="true"></i></button>
-          <span id="position" aria-live="polite" aria-atomic="true">01 / 10</span>
+          <span id="position" aria-live="polite" aria-atomic="true"></span>
           <button id="next" class="circle-button" type="button" aria-label="Next item"><i class="mark arrow" aria-hidden="true"></i></button>
         </div>
       </div>
@@ -112,14 +110,15 @@
         <ul id="cart-lines"></ul>
         <aside id="cart-summary" hidden aria-label="Order summary">
           <p><span id="cart-subtotal-label">Subtotal</span><strong id="cart-total"></strong></p>
-          <small id="cart-note"></small><button class="quiet-link" type="button" id="cart-rewards">Collector rewards</button><button class="action" type="button" id="cart-checkout">Checkout</button>
+          <small id="cart-note"></small><button class="quiet-link" type="button" id="cart-rewards" aria-haspopup="dialog">Lem Points · AUD $1 = 1 Lem Point</button><button class="action" type="button" id="cart-checkout">Checkout</button>
         </aside>
       </div>
       <p id="cart-status" role="status"></p>
     </section>
     <article id="detail" hidden>
       <div class="detail-mast">
-        <div class="detail-object"><img id="detail-art" alt=""></div>
+        <div class="detail-object"><img id="detail-art" alt=""><button id="edit-hero-photo" type="button" class="edit-photo-hit" aria-label="Edit product photos" hidden><span>Edit photos</span></button></div>
+        <div id="photo-faces" hidden role="group" aria-label="Product photos"><button type="button" data-side="front" aria-pressed="true">Front</button><button type="button" data-side="back" aria-pressed="false">Back</button></div>
       </div>
       <div class="detail-wrap">
         <div class="detail-heading">
@@ -131,20 +130,13 @@
         </div>
         <div class="detail-body">
           <div class="product-inspection"><button class="closeup" type="button" id="closeup" aria-pressed="false" aria-label="Zoom artwork"><img id="closeup-art" alt=""><i class="zoom-mark" aria-hidden="true"></i></button>
-          <div id="photo-faces" hidden role="group" aria-label="Product photos"><button type="button" data-side="front" aria-pressed="true">Front</button><button type="button" data-side="back" aria-pressed="false">Back</button></div></div>
+          </div>
           <div class="detail-notes"><dl id="card-facts" hidden></dl>
             <p id="detail-description"></p>
             <section class="condition-panel" id="condition-panel" hidden aria-labelledby="condition-heading">
               <h2 id="condition-heading">Inspect a copy</h2>
-              <fieldset class="copies"><legend>Sample copies</legend><div id="copy-options"></div></fieldset>
-              <div class="inspection">
-                <div class="wear-map" id="wear-map" aria-hidden="true"><span>LEMRIX</span><i id="wear-point" hidden></i></div>
-                <div class="wear-data">
-                  <div class="face-switch" role="group" aria-label="Condition diagram face"><button id="face-front" type="button" aria-pressed="true">Front</button><button id="face-back" type="button" aria-pressed="false">Back</button></div>
-                  <div aria-live="polite" aria-atomic="true"><strong id="copy-heading"></strong><p id="wear-note"></p></div>
-                </div>
-              </div>
-              <p class="map-caption">Illustrative wear map for the selected copy.</p>
+              <fieldset class="copies"><legend>Available copies</legend><div id="copy-options"></div></fieldset>
+              <div class="copy-condition" aria-live="polite"><strong id="copy-heading"></strong><p id="wear-note"></p><p id="back-wear-note" hidden></p></div>
               <button type="button" class="copy-offer-link" id="copy-offer">Make an offer on this copy</button>
             </section>
             <details open><summary>Design notes</summary><p id="detail-notes"></p></details>
@@ -154,7 +146,7 @@
         <a id="detail-return" class="quiet-link" href="#catalogue"><i class="mark arrow left" aria-hidden="true"></i> Back to collection</a>
       </div>
     </article>
-    <noscript><section class="no-script"><h1>The Lemrix shop</h1><p>Enable JavaScript to explore the collection preview.</p><a href="../">Back to Lemrix</a></section></noscript>
+    <noscript><section class="no-script"><h1>The Lemrix shop</h1><p>Enable JavaScript to browse the shop and check out.</p><a href="../">Back to Lemrix</a></section></noscript>
   </main>
   <dialog id="sets-dialog" class="collector-dialog" aria-labelledby="sets-heading">
     <header><h2 id="sets-heading">Browse sets</h2><button type="button" class="deal-close" data-close aria-label="Close set browser">×</button></header>
@@ -162,18 +154,21 @@
     <div class="set-browser"><nav id="set-eras" aria-label="Pokémon eras"></nav><div class="set-results"><h3 id="era-heading"></h3><div id="set-options"></div></div></div>
   </dialog>
   <dialog id="rewards-dialog" class="collector-dialog" aria-labelledby="rewards-heading">
-    <header><h2 id="rewards-heading">Lemrix Rewards</h2><button type="button" class="deal-close" data-close aria-label="Close rewards">×</button></header>
-    <div class="discount-ticket" aria-label="Upcoming member discount"><span class="discount-name">Member discount<small>Coming soon</small></span><strong>neegy%</strong></div>
-    <p id="reward-balance" aria-live="polite"></p><p id="reward-rule">Earn one point per whole Australian dollar spent on products. Collect Lemrix artwork as you go.</p>
-    <button type="button" class="action" id="reward-signin" hidden>Sign in for rewards</button>
-    <button type="button" class="action" id="reward-join" hidden>Join rewards</button><div id="reward-prints"></div>
-    <details id="reward-recovery" hidden><summary>Link a previous collector pass</summary><form id="restore-pass"><label>Recovery code<input type="password" name="code" autocomplete="off" required spellcheck="false" maxlength="90"></label><button type="submit" class="action">Link to my account</button></form></details>
+    <header><h2 id="rewards-heading">Lem Points</h2><button type="button" class="deal-close" data-close aria-label="Close Lem Points">×</button></header>
+    <p class="earn-rate">AUD $1 = 1 Lem Point</p>
+    <p id="reward-balance" aria-live="polite"></p>
+    <p id="reward-rule"></p>
+    <progress id="reward-progress" aria-label="Progress towards your next print" hidden></progress>
+    <button type="button" class="action" id="reward-signin" hidden>Sign in or create an account</button>
+    <div id="reward-prints"></div>
+    <p class="reward-terms">Points are added after payment on signed-in purchases. Shipping is excluded. Refunded products reduce your balance. Downloading a print keeps your points.</p>
     <p role="status" id="reward-notice"></p>
+    <button type="button" class="quiet-link" id="reward-retry" hidden>Try again</button>
   </dialog>
   <dialog id="search-dialog" aria-labelledby="search-title">
     <form method="dialog" class="search-top"><h2 id="search-title">Search the collection</h2><button value="close" class="icon-button close-search" aria-label="Close search">×</button></form>
     <label class="search-field"><i class="mark search" aria-hidden="true"></i><input id="search-field" type="search" placeholder="Search packs, cards, accessories…" autocomplete="off" aria-label="Search by name or category"></label>
-    <p class="search-prices" id="search-prices">Demo catalogue · Sample AUD prices</p>
+    <p class="search-prices" id="search-prices">Prices in Australian dollars</p>
     <div id="search-results" class="search-results"></div>
   </dialog>
   <dialog id="deal-dialog" aria-labelledby="deal-heading" aria-describedby="deal-intro">
@@ -186,24 +181,25 @@
     <form id="deal-offer-form" class="deal-form" hidden>
       <label for="deal-amount">Your offer</label>
       <div class="deal-currency"><span>AUD</span><input id="deal-amount" type="text" maxlength="30" inputmode="decimal" autocomplete="off" placeholder="0.00" required aria-describedby="deal-error"></div>
-      <button type="submit" class="action" id="deal-submit">Save demo offer</button>
+      <button type="submit" class="action" id="deal-submit">Send offer</button>
     </form>
     <form id="deal-auth-form" class="deal-form" hidden>
       <label for="deal-user">Username</label>
       <input id="deal-user" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="24" required>
       <label for="deal-pass">Password</label>
-      <input id="deal-pass" name="password" type="password" autocomplete="current-password" minlength="6" maxlength="128" required>
+      <input id="deal-pass" name="password" type="password" autocomplete="current-password" minlength="1" maxlength="128" required>
       <button type="submit" class="action" id="deal-auth-submit">Sign in</button>
       <div id="google-button" aria-label="Google account"></div><button id="apple-button" type="button" class="deal-apple" hidden>Sign in with Apple</button><small id="google-status" role="status"></small>
       <button type="button" class="deal-text" id="deal-auth-swap">Don't have an account? Sign up</button>
     </form>
     <div id="deal-saved" class="deal-after" hidden><button type="button" class="action" id="deal-my-offers">View my offers</button><button type="button" class="deal-text" id="deal-done">Done</button></div>
     <section id="deal-profile" hidden>
-      <button type="button" class="deal-text" id="profile-rewards">Open collector pass</button><h3>Your offers</h3><div id="deal-offers"></div>
+      <button type="button" class="deal-text" id="profile-rewards" aria-haspopup="dialog">View Lem Points</button><h3>Your offers</h3><div id="deal-offers"></div>
       <button type="button" class="deal-text" id="deal-logout">Sign out</button>
     </section>
     <section id="staff-profile" hidden>
       <button class="action" id="staff-toggle">Edit shop</button>
+      <h3>Customer offers</h3><div id="staff-offers" aria-live="polite"></div>
       <button class="deal-text" id="staff-logout">Sign out</button>
       <button class="deal-text" id="staff-logout-all">Sign out on all devices</button>
     </section>
@@ -211,7 +207,7 @@
   </dialog>
   <aside id="edit-bar" hidden aria-label="Shop editing tools">
     <span><b>Edit mode</b><small id="edit-count" role="status">Browse to a product to edit</small></span>
-    <button type="button" id="edit-push" disabled>Push changes</button>
+    <button type="button" id="edit-push" disabled>Save changes</button>
     <button type="button" id="edit-exit" aria-label="Exit edit mode">×</button>
   </aside>
   <dialog id="edit-drawer" aria-labelledby="edit-title">
@@ -226,15 +222,22 @@
     <div id="crop-review" hidden><div id="crop-corners"></div><img id="crop-proof" alt="Standardised product photo preview" hidden><div class="desk-actions"><button type="button" aria-pressed="false" id="crop-preview-toggle">Preview result</button><button type="button" id="desk-rotate">Rotate 90°</button><label><input type="checkbox" id="desk-balance">Balance lighting</label></div></div>
     <p id="capture-hint" class="sub" role="status"></p><button type="button" class="secondary" id="read-label" hidden>Read label again</button>
   </section>
-  <label>Product name<input name="name" maxlength="100" required></label><label>Description<textarea name="description" rows="3" maxlength="3000" required></textarea></label><div class="cols"><label>Category<select name="category"><option>Singles</option><option>Packs</option><option>Accessories</option></select></label><label>Stock quantity<input placeholder="Unset" name="quantity" type="number" inputmode="numeric" min="0" max="1000000" step="1"></label></div><div class="cols"><label>Format<input name="format" maxlength="100"></label><label>Collection<select name="collection"><option value="">Main collection</option><option value="recently-added">Recently added</option><option value="pre-orders">Pre-orders</option></select></label></div><details open class="card-fields"><summary>Collector details</summary><div class="cols">
-  <label>Set<input name="set" list="known-sets" maxlength="120"></label><label>Era / series<input name="series" list="known-eras" maxlength="100"></label>
+  <label>Product name<input name="name" maxlength="100" required></label><label>Description<textarea name="description" rows="3" maxlength="3000" required></textarea></label><div class="cols"><label>Category<select name="category"><option>Singles</option><option>Packs</option><option>Accessories</option></select></label><label><span id="new-quantity-label">Stock quantity</span><input placeholder="Unset" name="quantity" type="number" inputmode="numeric" min="0" max="1000000" step="1"></label></div><div class="cols"><label>Format<input name="format" maxlength="100"></label><label>Collection<select name="collection"><option value="">Main collection</option><option value="recently-added">Recently added</option><option value="pre-orders">Pre-orders</option></select></label></div><label id="new-dispatch" hidden>Expected dispatch date<input type="date" name="preorderDispatch"><small>Leave blank to keep pre-orders closed.</small></label><details open class="card-fields"><summary>Collector details</summary><div class="cols">
+  <label>Set<select name="set"></select></label><label>Era / series<select name="series"></select></label>
   <label>Card number<input name="cardNumber" maxlength="35"></label><label>Language<select name="language"><option value="">Choose language</option><option>English</option><option>Japanese</option><option>Korean</option><option>Chinese</option><option>Other</option></select></label>
-  <label>Grading company<input name="grader" maxlength="24" list="graders"></label><label>Grade<input name="grade" maxlength="30"></label>
+  <label>Grading company<select name="grader"></select></label><label>Grade<input name="grade" maxlength="30"></label>
   <label>Certificate number<input name="certificate" maxlength="42"></label><label>Year<input name="year" maxlength="4" inputmode="numeric"></label>
-  <label>Item condition<input name="itemCondition" list="physical-condition" maxlength="80"></label>
+  <label>Item condition<select name="itemCondition"></select></label>
   </div></details>
-  <datalist id="known-sets"></datalist><datalist id="known-eras"></datalist><datalist id="graders"><option>PSA</option><option>CGC</option><option>BGS</option><option>ARK</option></datalist><datalist id="physical-condition"><option>Near mint</option><option>Lightly played</option><option>Moderately played</option><option>Heavily played</option><option>Damaged</option><option>Sealed</option></datalist>
-  <div id="prices" class="prices"></div><label>Design notes<textarea name="notes" maxlength="3000" rows="2"></textarea></label></div><div class="actions"><span id="form-status" class="sub" role="status"></span><label class="desk-next"><input type="checkbox" id="stage-next">Add another</label><button class="primary" id="save">Stage changes</button></div></form>
+  <div id="prices" class="prices"></div><label>Design notes<textarea name="notes" maxlength="3000" rows="2"></textarea></label></div><div class="actions"><span id="form-status" class="sub" role="status"></span><label class="desk-next"><input type="checkbox" id="stage-next">Add another</label><button class="primary" id="save">Save changes</button></div></form>
   </dialog>
+<dialog class="taxonomy-dialog" id="add-choice" aria-labelledby="add-choice-title">
+  <form>
+    <h2 id="add-choice-title">Add choice</h2>
+    <label>Name<input name="choice" required autocomplete="off"></label>
+    <p role="status" aria-live="polite"></p>
+    <div><button type="button" data-cancel>Cancel</button><button type="submit">Add</button></div>
+  </form>
+</dialog>
 </body>
 </html>

@@ -11,8 +11,9 @@ let pointerStart = null;
 let ignoreClickUntil = 0;
 
 const collections = {
-  'recently-added': { title: 'Recently added', intro: 'The latest additions to the Lemrix art-card series.' },
-  'pre-orders': { title: 'Pre-orders', intro: 'A first look at upcoming designs. Pre-order dates and reservations are still to come.' }
+  __proto__: null,
+  'recently-added': { title: 'Recently added', intro: 'The latest additions to the shop.' },
+  'pre-orders': { title: 'Pre-orders', intro: 'Reserve upcoming releases. Each open pre-order shows its expected dispatch date.' }
 };
 const dollars = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', currencyDisplay: 'code' });
 const price = cents => dollars.format(cents / 100);
@@ -27,7 +28,7 @@ function listingPrice(item) {
   return 'From ' + price(window.LemrixCollection.amount(item));
 }
 function stockLabel(item) {
-  if (item.collection === 'pre-orders') return 'Pre-order preview';
+  if (item.collection === 'pre-orders') return cart.preorderStatus(item);
   if (item.reserved) return 'Temporarily reserved';
   if (Number.isInteger(item.quantity)) {
     const quantity=window.LemrixCollection.stockCount(item);
@@ -55,7 +56,8 @@ function browseSettings(hash = currentHash()) {
   }
   const params = new URLSearchParams(hash.slice(1));
   const filter = params.get('category');
-  const category = ['Packs', 'Singles', 'Accessories'].includes(filter) ? filter : 'All items';
+  const known = ['Packs', 'Singles', 'Accessories'].includes(filter) || products.some(item => item.category === filter);
+  const category = known ? filter : 'All items';
   const mode = (params.get('view') === 'catalogue' || hash==='#catalogue') ? 'catalogue' : 'showroom';
   return { mode, category };
 }
@@ -73,11 +75,12 @@ function setBrowseRoute(view, filter) {
   transitionRoute({ type: 'navigate' });
 }
 
-function createImage(product, decorative = true) {
+function createImage(product, loading = 'eager') {
   const image = new Image();
   image.decoding = "async";
+  image.loading = loading;
   image.src = imagePath(product);
-  image.alt = decorative ? '' : product.name + ' — ' + product.format;
+  image.alt = '';
   image.draggable = false;
   return image;
 }
@@ -86,7 +89,10 @@ const slots = new Map();
 function rebuildGallery() {
   gallery.replaceChildren();
   slots.clear();
-  products.forEach((item,index) => {
+}
+
+function gallerySlot(item, index) {
+  if (slots.has(item.id)) return slots.get(item.id);
   const slot = document.createElement('button');
   slot.type = 'button';
   slot.className = 'slot';
@@ -103,28 +109,37 @@ function rebuildGallery() {
   }
   slot.addEventListener('click', () => {
     if (performance.now() < ignoreClickUntil) return;
+    if (window.shopEditor?.active) {
+      if(selectedId !== item.id)selectProduct(item);
+      window.shopEditor.openPhotos(item);
+      return;
+    }
     if (selectedId === item.id) location.hash = detailHash(item);
     else selectProduct(item);
   });
   gallery.append(slot);
   slots.set(item.id,slot);
-  });
+  return slot;
 }
-rebuildGallery();
 
-function selectProduct(item) {
+function selectProduct(item, list = filteredProducts()) {
   selectedId = item.id;
   if (history.state?.lemrixShown !== item.id) {
     try { history.replaceState({ ...history.state, lemrixShown: item.id }, ''); } catch {}
   }
-  const list = filteredProducts();
   const indices = new Map(list.map((p,i)=>[p.id,i]));
   const activeIndex = indices.get(item.id);
-  for (const product of products) {
-    const slot = slots.get(product.id);
-    const index = indices.get(product.id) ?? -1;
+  // Only the current product and its immediate neighbours are visible.
+  // Keep previously visited slots for the transition as they leave the stage.
+  for (const offset of [0, -1, 1]) {
+    const index = (activeIndex + offset + list.length) % list.length;
+    gallerySlot(list[index], index);
+  }
+  for (const [id,slot] of slots) {
+    const index = indices.get(id) ?? -1;
     slot.hidden = index < 0;
     if (index < 0) continue;
+    const product = list[index];
     let distance = index - activeIndex;
     if (distance > list.length / 2) distance -= list.length;
     if (distance < -list.length / 2) distance += list.length;
@@ -132,7 +147,7 @@ function selectProduct(item) {
     slot.dataset.pos = String(place);
     slot.inert = Math.abs(place) > 1;
     slot.tabIndex = place === 0 ? 0 : -1;
-    slot.setAttribute('aria-label', (place === 0 ? 'View ' : 'Show ') + product.name);
+    slot.setAttribute('aria-label', (window.shopEditor?.active ? 'Edit photos for ' : place === 0 ? 'View ' : 'Show ') + product.name);
   }
   byId('featured-title').textContent = item.name;
   byId('featured-format').textContent = itemFormat(item);
@@ -147,16 +162,16 @@ function step(direction) {
   const list = filteredProducts();
   if (list.length < 2) return;
   const index = list.indexOf(getSelected(list));
-  selectProduct(list[(index + direction + list.length) % list.length]);
+  selectProduct(list[(index + direction + list.length) % list.length], list);
 }
 
-function tileFor(item) {
+function tileFor(item, index) {
   const link = document.createElement('a');
   link.href = detailHash(item);
   link.className = 'tile';
   const art = document.createElement('div');
   art.className = 'tile-art';
-  art.append(createImage(item));
+  art.append(createImage(item, index === 0 ? 'eager' : 'lazy'));
   const grade=window.LemrixCollection.badge(item);
   if(grade){const badge=document.createElement('span');badge.className='grade-badge';badge.textContent=grade;art.append(badge);}
   const title = document.createElement('h2');
@@ -188,7 +203,33 @@ function addProductTile() {
   return button;
 }
 
+const coreCategories = new Set(['Singles','Packs','Accessories','All items']);
+let categoryMenuKey;
+function syncCategoryMenu() {
+  const menu = byId('categories');
+  const names = [...new Set(products.map(item => item.category).filter(name => name && !coreCategories.has(name)))].sort((a,b) => a.localeCompare(b));
+  const key = JSON.stringify(names);
+  if (key === categoryMenuKey) return;
+  categoryMenuKey = key;
+  menu.querySelectorAll('[data-custom-category]').forEach(node => node.remove());
+  if (names.length > 3) {
+    const select = document.createElement('select');
+    select.dataset.customCategory = '';
+    select.setAttribute('aria-label','More product categories');
+    select.add(new Option('More categories', ''));
+    names.forEach(name => select.add(new Option(name, name)));
+    select.onchange = () => { if (select.value) setBrowseRoute(browseSettings().mode, select.value); };
+    menu.append(select);
+    return;
+  }
+  for (const name of names) {
+    const button = document.createElement('button');
+    button.type = 'button'; button.dataset.customCategory = ''; button.dataset.category = name;
+    button.textContent = name; menu.append(button);
+  }
+}
 function renderBrowse() {
+  syncCategoryMenu();
   window.LemrixCollection.sync();
   window.LemrixOffers?.setCopy(null);
   const list = filteredProducts();
@@ -199,7 +240,9 @@ function renderBrowse() {
   byId('catalogue').hidden = !isGrid;
   byId('show-grid').setAttribute('aria-pressed', String(isGrid));
   byId('show-stage').setAttribute('aria-pressed', String(!isGrid));
-  for (const button of byId('categories').children) {
+  const moreCategories = byId('categories').querySelector('select');
+  if (moreCategories) moreCategories.value = [...moreCategories.options].some(option => option.value === category) ? category : '';
+  for (const button of byId('categories').querySelectorAll('[data-category]')) {
     button.setAttribute('aria-pressed', String(button.dataset.category === category));
   }
   for (const link of document.querySelectorAll('[data-collection]')) {
@@ -211,7 +254,7 @@ function renderBrowse() {
   byId('back-link').title = 'Back to Lemrix home';
   document.title = (collections[category]?.title || 'The shop') + ' · Lemrix TCG';
   if (!isGrid) {
-    selectProduct(getSelected(list));
+    selectProduct(getSelected(list), list);
     return;
   }
   byId('listing-title').textContent = window.LemrixCollection.selectedSet() || collections[category]?.title || category;
@@ -222,6 +265,11 @@ function renderBrowse() {
   if (window.shopEditor?.active) tiles.push(addProductTile());
   byId('tiles').replaceChildren(...tiles);
   byId('empty').hidden = !!list.length;
+  byId('reset-filter').textContent = window.catalogueLoadFailed ? 'Reload collection' : 'Browse all items';
+  if (window.catalogueLoadFailed) {
+    byId('empty').firstElementChild.textContent = 'The collection could not load. You can try again.';
+    return;
+  }
   byId('empty').firstElementChild.textContent = window.LemrixCollection.selectedSet()?'There are no matching Lemrix listings for this set yet.':'There are no matching items in this collection.';
 }
 
@@ -232,7 +280,7 @@ function updateCartState() {
   const present=cart.contains(detailItem.id,copy);
   const {reason}=cart.availability(detailItem,copy);
   byId('add-to-cart').disabled=!present && !!reason;
-  byId('cart-label').textContent=present?'View cart':reason || 'Add to cart';
+  byId('cart-label').textContent=present?'View cart':reason || (detailItem.collection==='pre-orders'?'Add pre-order to cart':'Add to cart');
 }
 window.addEventListener('lemrix-cart-change',updateCartState);
 
@@ -241,24 +289,19 @@ function paintInspection() {
   const copy = detailItem.copies[index];
   window.LemrixOffers?.setCopy(detailItem, index);
   renderCheckout(detailItem, copy);
-  const [note, x, y] = copy[inspectionFace];
   byId('detail-price').textContent = price(copy.cents);
   byId('copy-heading').textContent = copyName(index) + ' · ' + copy.condition;
-  byId('wear-note').textContent = note;
-  const point = byId('wear-point');
-  point.hidden = x === undefined;
-  if (x !== undefined) {
-    point.style.left = x + '%';
-    point.style.top = y + '%';
-  }
-  byId('wear-map').dataset.face = inspectionFace;
-  for (const face of ['front', 'back']) byId('face-' + face).setAttribute('aria-pressed', String(face === inspectionFace));
+  byId('wear-note').textContent = copy[inspectionFace]?.[0] || '';
+  const backNote = byId('back-wear-note');
+  const hasBackPhoto = copy.photos?.back || (index === 0 && detailItem.backImage);
+  backNote.hidden = !!hasBackPhoto || !copy.back?.[0];
+  backNote.textContent = backNote.hidden ? '' : 'Back · ' + copy.back[0];
   window.shopEditor?.renderCopy(detailItem,index,inspectionFace);
 }
 
 function offerCopies(item) {
   byId('condition-panel').hidden = !item.copies;
-  if (!item.copies) { renderCheckout(item, item); window.LemrixOffers?.setCopy(null); byId('detail-price').textContent = price(item.cents); return; }
+  if (!item.copies) { renderCheckout(item, item); window.LemrixOffers?.setCopy(item, null); byId('detail-price').textContent = price(item.cents); return; }
   inspectionFace = 'front';
   const routeCopy = new URLSearchParams(location.hash.split('?')[1] || '').get('copy');
   const remembered = routeCopy !== null ? Number(routeCopy) : history.state?.lemrixCopy ?? copySelection.get(item.id);
@@ -269,7 +312,7 @@ function offerCopies(item) {
     const label = document.createElement('label');
     const input = document.createElement('input');
     input.type = 'radio';
-    input.name = 'sample-copy';
+    input.name = 'shop-copy';
     input.checked = initial === index;
     input.value = String(index);
     const name = document.createElement('strong');
@@ -283,6 +326,7 @@ function offerCopies(item) {
       if (!input.checked) return;
       copySelection.set(item.id, index);
       try { history.replaceState({ ...history.state, lemrixCopy: index }, '', '#item/'+item.id+'?copy='+index); } catch {}
+      inspectionFace = 'front';
       paintInspection();
       window.LemrixCollection.inspect(item,index);
       window.shopEditor?.renderFacts(item);
@@ -294,12 +338,12 @@ function offerCopies(item) {
   paintInspection();
 }
 
-for (const face of ['front', 'back']) {
-  byId('face-' + face).addEventListener('click', () => {
-    inspectionFace = face;
-    paintInspection();
-  });
-}
+document.addEventListener('lemrix-photo-face', event => {
+  if (!detailItem?.copies) return;
+  inspectionFace = event.detail;
+  paintInspection();
+});
+byId('edit-hero-photo').onclick = () => window.shopEditor?.openPhotos(detailItem, copySelection.get(detailItem.id), window.LemrixCollection.photoFace());
 const checkoutButton = byId('checkout-button');
 const checkoutNotice = byId('checkout-status');
 let checkoutChoice = '', openingCheckout = false;
@@ -326,7 +370,7 @@ function checkoutMessage(message) {
 }
 function renderCheckout(item, selected) {
   const index = item.copies ? copySelection.get(item.id) ?? 0 : null;
-  const choice = JSON.stringify([item.id, index, selected.cents]);
+  const choice = JSON.stringify([item.id, index, selected.cents, item.collection === 'pre-orders' ? item.preorderDispatch : null]);
   if (choice !== checkoutChoice) {
     checkoutChoice = choice;
     checkoutMessage('');
@@ -334,10 +378,11 @@ function renderCheckout(item, selected) {
   const {reason}=cart.availability(item,index);
   checkoutButton.hidden = !!reason;
   checkoutButton.disabled = checkoutInProgress();
-  checkoutButton.textContent = item.checkoutMode === 'test' ? 'Test checkout' : 'Buy now';
+  checkoutButton.textContent = item.checkoutMode === 'test' ? 'Test checkout' : item.collection === 'pre-orders' ? 'Pre-order now' : 'Buy now';
   const note = byId('checkout-note');
   note.hidden = false;
-  note.textContent = reason || (item.checkoutMode === 'test' ? 'Square test checkout · No charge' : 'Square checkout · Ships within Australia');
+  note.textContent = reason || (item.checkoutMode === 'test' ? 'Square test checkout · No charge' :
+    item.collection === 'pre-orders' ? 'Pay now · Expected dispatch ' + cart.dispatchLabel(item) : 'Square checkout · Ships within Australia');
 }
 async function checkoutPost(path, body) {
   const response = await fetch('/api/checkout' + path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -390,7 +435,9 @@ async function refreshStock(force=false) {
     const rows=await response.json();
     if (!Array.isArray(rows) || window.shopEditor?.active) return;
     lastStockRead=Date.now();
-    if (JSON.stringify(rows)===JSON.stringify(products)) return;
+    const recovering=window.catalogueLoadFailed;
+    window.catalogueLoadFailed=false;
+    if (!recovering && JSON.stringify(rows)===JSON.stringify(products)) return;
     products.splice(0,products.length,...rows);
     window.shopEditor?.refreshPublished?.(rows);
     rebuildGallery();
@@ -481,10 +528,10 @@ async function startCustomerCheckout(selection) {
 }
 checkoutButton.addEventListener('click', async () => {
   if (checkoutInProgress() || !detailItem) return;
-  const [itemId, copy, expectedCents] = JSON.parse(checkoutChoice);
+  const [itemId, copy, expectedCents, dispatch] = JSON.parse(checkoutChoice);
   if (cart.availability(detailItem,copy).reason) return;
   checkoutMessage('Opening secure checkout…');
-  try { await startCustomerCheckout({itemId,copy,expectedCents}); }
+  try { await startCustomerCheckout({itemId,copy,expectedCents,expectedDispatch:dispatch || undefined}); }
   catch(error) { checkoutMessage(error.message); }
 });
 function checkoutReturn() {
@@ -515,22 +562,23 @@ if (products.some(p => p.checkoutMode === 'live' || p.checkoutMode === 'off')) {
 function renderDetail(item) {
   byId('browse').hidden = true;
   byId('detail').hidden = false;
+  byId('edit-hero-photo').hidden = !window.shopEditor?.active;
   const back = history.state?.lemrixCollection || lastBrowseHash || '#showroom';
   byId('back-link').setAttribute('href', back);
   byId('back-link').setAttribute('aria-label', 'Back to collection');
   byId('back-link').title = 'Back to collection';
   byId('detail-return').setAttribute('href', back);
   byId('detail-name').textContent = item.name;
-  byId('detail-family').textContent = item.category + (item.checkoutMode !== 'test' && item.quantity != null ? ' / AUD' : ' / Sample AUD price');
+  byId('detail-family').textContent = item.category + ' / AUD';
   byId('detail-format').textContent = itemFormat(item);
   const stock = stockLabel(item);
   const defaultAvailability = item.collection === 'pre-orders'
-    ? 'Pre-order preview. Orders will open when the release is confirmed.'
+    ? item.canBuy ? (item.checkoutMode==='test'?'Test checkout. ':'Pay in full at checkout. ') + 'Expected dispatch ' + cart.dispatchLabel(item) + '.' : stock + '.'
     : item.reserved ? 'Temporarily reserved in an open checkout.'
     : item.canBuy ? 'Available to order. Prices are in Australian dollars.'
     : item.checkoutMode === 'off' && item.quantity > 0 ? 'In stock. Online checkout is unavailable.'
     : stock+'.';
-  byId('availability').textContent=item.availability && item.canBuy ? item.availability : defaultAvailability;
+  byId('availability').textContent=item.availability && item.canBuy && item.collection !== 'pre-orders' ? item.availability : defaultAvailability;
   offerCopies(item);
   byId('detail-description').textContent = item.description;
   byId('detail-notes').textContent = item.notes;
@@ -600,18 +648,21 @@ for (const id of ['back-link', 'detail-return']) {
 }
 byId('categories').addEventListener('click', e => {
   const filter = e.target.closest('[data-category]');
-  if (filter) setBrowseRoute(browseSettings().mode, filter.dataset.category);
+  if (filter) setBrowseRoute(filter.dataset.category === 'recently-added' ? 'catalogue' : browseSettings().mode, filter.dataset.category);
 });
 byId('show-grid').addEventListener('click', () => setBrowseRoute('catalogue', browseSettings().category));
 byId('show-stage').addEventListener('click', () => {
   const { category } = browseSettings();
   setBrowseRoute('showroom', category);
 });
-byId('reset-filter').addEventListener('click', () => setBrowseRoute('catalogue', 'All items'));
+byId('reset-filter').addEventListener('click', () => {
+  if (window.catalogueLoadFailed) refreshStock(true);
+  else setBrowseRoute('catalogue', 'All items');
+});
 byId('prev').addEventListener('click', () => step(-1));
 byId('next').addEventListener('click', () => step(1));
 byId('showroom').addEventListener('keydown', e => {
-  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.target.closest('input,textarea,select')) return;
   const arrows = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 };
   if (e.key in arrows) {
     e.preventDefault();
@@ -620,7 +671,7 @@ byId('showroom').addEventListener('keydown', e => {
     const list = filteredProducts();
     if (list.length) {
       e.preventDefault();
-      selectProduct(e.key === 'Home' ? list[0] : list[list.length - 1]);
+      selectProduct(e.key === 'Home' ? list[0] : list[list.length - 1], list);
     }
   } else return;
   if (e.target?.closest('.slot')) slots.get(selectedId)?.focus({ preventScroll: true });
@@ -650,7 +701,7 @@ window.addEventListener('pointercancel', finishDrag);
 let wheelLast = -Infinity, wheelMove = -Infinity, wheelTotal = 0;
 let wheelSign = 0, wheelLatched = false, wheelMagnitude = 0;
 byId('showroom').addEventListener('wheel', e => {
-  if (e.ctrlKey || e.metaKey || e.altKey || searchDialog.open || filteredProducts().length < 2) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || searchDialog.open || byId('next').disabled) return;
   const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
   const dx = e.deltaX * unit, dy = e.deltaY * unit;
   const horizontal = Math.abs(dx) > Math.abs(dy);
@@ -687,6 +738,7 @@ byId('add-to-cart').addEventListener('click', () => {
 });
 byId('closeup').addEventListener('click', e => {
   const button = e.currentTarget;
+  if (window.shopEditor?.active) { window.shopEditor.openPhotos(detailItem, copySelection.get(detailItem.id), window.LemrixCollection.photoFace()); return; }
   const zoomed = button.getAttribute('aria-pressed') !== 'true';
   button.setAttribute('aria-pressed', String(zoomed));
   button.setAttribute('aria-label', zoomed ? 'Zoom out' : 'Zoom artwork');
@@ -707,7 +759,7 @@ function renderSearch() {
     name.textContent = item.name;
     const categoryText = document.createElement('span');
     categoryText.textContent = listingPrice(item);
-    link.append(createImage(item), name, categoryText);
+    link.append(createImage(item, 'lazy'), name, categoryText);
     return link;
   });
   if (!links.length) {

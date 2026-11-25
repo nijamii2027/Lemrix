@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const pieces = await Promise.all(['public-origin', 'admin-auth', 'inventory', 'customer', 'rewards', 'checkout'].map(name => readFile(join(root, 'worker', name + '.mjs'), 'utf8')));
+const pieces = await Promise.all(['public-origin', 'admin-auth', 'inventory', 'customer', 'rewards', 'checkout', 'offers'].map(name => readFile(join(root, 'worker', name + '.mjs'), 'utf8')));
 const initial = runInNewContext((await readFile(join(root, 'dist/shop/catalogue.js'), 'utf8')) + ';products', {}, {timeout:1000});
 const artwork = {};
 if (process.argv.includes('--test-art')) {

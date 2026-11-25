@@ -24,18 +24,17 @@ window.LemrixCapture = function createDesk(form) {
     epoch++;scanEpoch++;window.LemrixScan?.cancel();loading=0;clearTimeout(scanTimer);stop();cleanup?.();cleanup=null;
     entries.forEach(discard);entries.clear();incoming.clear();suggested.clear();correction=null;previewing=false;shutterBusy=false;
   }
-  function open(row,markDirty) {
-    reset();item=row;kindWasSet=!!row;changed=markDirty;copy=0;side='front';
-    for(const n of names)field(n).value=row?.card?.[n] || (n==='productType'? (row?.category==='Packs'?'pack':row?.category==='Accessories'?'accessory':'card'):'');
+  function open(row,markDirty,copyIndex=0,face='front') {
+    reset();item=row;kindWasSet=!!row;changed=markDirty;copy=row?.copies?.[copyIndex]?copyIndex:0;side=face==='back'?'back':'front';
+    for (const n of ['category', ...names].filter(window.LemrixTaxonomy.has)) {
+      window.LemrixTaxonomy.attach(field(n), n, n === 'category' ? (row?.category || 'Singles') : row?.card?.[n]);
+    }
+    for(const n of names.filter(name=>!window.LemrixTaxonomy.has(name)))field(n).value=row?.card?.[n] || (n==='productType'? (row?.category==='Packs'?'pack':row?.category==='Accessories'?'accessory':'card'):'');
     if(!row)field('quantity').value='1';
     const select=id('capture-copy');
     select.replaceChildren(...(row?.copies||[]).map((c,i)=>new Option('Copy '+String.fromCharCode(65+i)+' · '+c.condition,i)));
+    if(row?.copies)select.value=String(copy);
     id('capture-copy-wrap').hidden=!row?.copies;
-    if(!id('known-sets').children.length){
-      const options=v=>[...new Set(v.filter(Boolean))].map(value=>new Option(value));
-      id('known-sets').replaceChildren(...options(directory().map(s=>s.name)));
-      id('known-eras').replaceChildren(...options(directory().map(s=>s.series)));
-    }
     tell('Photograph the product upright against a plain, contrasting mat. Keep all four edges in frame.');
     paint();
   }
@@ -102,8 +101,8 @@ window.LemrixCapture = function createDesk(form) {
       if(fromCamera && side===face && face==='front')side='back';
       paint();discard(previousEntry);
       tell(fromCamera && side==='back' && face==='front'?'Front ready. Capture the back.':
-        entry.prepared.confidence<.55?'Check the four crop corners before staging.':'Photo ready. Adjust the corners if needed.');
-      scanTimer=setTimeout(readLabel,450);
+        entry.prepared.confidence<.55?'Check the four crop corners before saving.':'Photo ready. Adjust the corners if needed.');
+      if(!item)scanTimer=setTimeout(readLabel,450);
     }catch(e){if(at===epoch && incoming.get(slot)===entry)tell(e.message||'Could not read this photo.');}
     finally{
       if(entries.get(slot)!==entry)discard(entry);
@@ -119,8 +118,11 @@ window.LemrixCapture = function createDesk(form) {
       if(!input||input.value!==before[n])continue;
       const provisional=n==='category'&&input.value==='Singles' || n==='productType'&&input.value==='card';
       if(input.value && input.value!==suggested.get(n) && !(provisional && !item))continue;
-      if(input.tagName==='SELECT' && ![...input.options].some(o=>o.value===value))continue;
-      input.value=value.slice(0,input.maxLength>0?input.maxLength:180);
+      if(window.LemrixTaxonomy.has(n))window.LemrixTaxonomy.selectValue(input,value);
+      else {
+        if(input.tagName==='SELECT' && ![...input.options].some(o=>o.value===value))continue;
+        input.value=value.slice(0,input.maxLength>0?input.maxLength:180);
+      }
       suggested.set(n,input.value);accepted.push(n);
     }
     if (fields?.grader && !kindWasSet && (!item && field('productType').value==='card')) field('productType').value='slab';
@@ -129,7 +131,7 @@ window.LemrixCapture = function createDesk(form) {
   }
   async function readLabel() {
     const front=entries.get(key('front')),back=entries.get(key('back'));
-    if(!front?.prepared)return;
+    if(item || !front?.prepared)return;
     const version=++scanEpoch,copyAt=copy;
     const before=Object.fromEntries(['name','category','format',...names].map(n=>[n,field(n).value]));
     const object=entry=>entry?.prepared?.forLabel(entry.rotation) || null;
@@ -145,7 +147,7 @@ window.LemrixCapture = function createDesk(form) {
       }
       const accepted=applySuggestions(result.fields,before);
       if(accepted.length)changed();
-      tell(result.warning || (accepted.length?'Suggested details are filled in. Compare them with the label before staging.':'Check the label and fill in any missing details.'));
+      tell(result.warning || (accepted.length?'Suggested details are filled in. Compare them with the label before saving.':'Check the label and fill in any missing details.'));
     }catch{if(version===scanEpoch)tell('The label could not be read. You can enter the details below.');}
   }
   async function startCamera(preferredDevice){
@@ -187,10 +189,11 @@ window.LemrixCapture = function createDesk(form) {
   id('desk-balance').onchange=e=>{const entry=entries.get(key(side));if(entry){entry.balance=e.target.checked;refreshPhoto(entry);}};
   id('desk-rotate').onclick=()=>{const entry=entries.get(key(side));if(entry){entry.rotation=(entry.rotation+1)%4;refreshPhoto(entry).then(readLabel);}};
   id('read-label').onclick=readLabel;
-  field('productType').onchange=()=>{kindWasSet=true;field('category').value=groups[field('productType').value];};
-  field('set').addEventListener('change',()=>{const match=directory().find(s=>s.name===field('set').value && (!field('language').value||s.language===field('language').value));if(match)field('series').value=match.series;});
+  field('productType').onchange=()=>{kindWasSet=true;window.LemrixTaxonomy.selectValue(field('category'),groups[field('productType').value]);};
+  field('set').addEventListener('change',()=>{const match=directory().find(s=>s.name===field('set').value && (!field('language').value||s.language===field('language').value));if(match)window.LemrixTaxonomy.selectValue(field('series'),match.series);});
   function validate(){
     if(loading || [...entries.values()].some(v=>!v.blob))return 'Wait for the crop to finish or replace the unreadable photo.';
+    if(item && !entries.size)return 'Choose a photo to save.';
     if(!item && !entries.has('0:front'))return 'Add a front photo first.';
     if(!item && ['card','slab'].includes(field('productType').value) && !entries.has('0:back'))return 'Add the back photo for this card.';
     return '';
@@ -205,7 +208,7 @@ window.LemrixCapture = function createDesk(form) {
       if(photos)photos[Number(index)][face]=path;
       if(Number(index)===0){if(face==='front')row.image=path;else row.backImage=path;}
     }
-    row.card=card;
+    if(!item)row.card=card;
     if(photos)row.copies=row.copies.map((c,i)=>({...c,photos:photos[i]}));
     return {card,backImage:row.backImage,copyPhotos:photos};
   }

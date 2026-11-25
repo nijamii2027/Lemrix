@@ -75,6 +75,7 @@ main:focus{outline:0}
 .slot[data-pos="-1"]{--dx:-1;--tilt:-6deg}
 .slot[data-pos="1"]{--dx:1;--tilt:6deg}
 .slot[data-pos="-2"],.slot[data-pos="2"]{--scale:.38;--blur:6px;--fade:0;pointer-events:none}
+.slot:is([data-pos="-2"],[data-pos="2"]) :is(img,.object-pair){animation-play-state:paused}
 .slot[data-pos="-2"]{--dx:-1.65}
 .slot[data-pos="2"]{--dx:1.65}
 .slot[data-pos="0"]{z-index:2}
@@ -353,3 +354,16 @@ html[data-motion="reduced"] #search-dialog[open],html[data-motion="reduced"] #se
 .recovery-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 18px}
 .recovery-actions .quiet-link{min-height:40px;text-decoration:underline;text-underline-offset:3px}
 #add-to-cart:disabled{opacity:.58;cursor:default}
+
+.taxonomy-dialog{width:min(24rem,calc(100vw - 2rem));max-height:90dvh;margin:auto;padding:1.35rem;border:1px solid var(--line);border-radius:14px;background:white;color:var(--ink)}
+.taxonomy-dialog::backdrop{background:#111a335c}
+.taxonomy-dialog h2{margin:0 0 1rem;font-size:1.25rem}
+.taxonomy-dialog label{display:grid;gap:.35rem;font-weight:700}
+.taxonomy-dialog input{min-width:0;width:100%;padding:.7rem;border:1px solid var(--line);border-radius:8px;font:inherit;color:inherit}
+.taxonomy-dialog [role=status]{min-height:1.3em;margin:.4rem 0;font-size:.87rem}
+.taxonomy-dialog form>div{display:flex;gap:.6rem;justify-content:flex-end}
+.taxonomy-dialog button{padding:.55rem 1rem;border:1px solid var(--line);border-radius:2rem;font-weight:700}
+.taxonomy-dialog [type=submit]{background:var(--navy);color:#fff}
+
+#categories [data-custom-category]{max-width:min(15rem,80vw);overflow-wrap:anywhere;text-align:left}
+#categories select{pointer-events:auto;padding:.45rem .6rem;border:1px solid var(--line);border-radius:5px;background:var(--paper,#fff);color:var(--ink);font:inherit}
