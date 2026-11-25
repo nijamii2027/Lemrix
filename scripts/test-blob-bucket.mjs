@@ -113,6 +113,39 @@ function fixture() {
   assert.equal(calls.filter(call => call.path === 'store/v1/new' && call.method === 'put').every(call => call.options.allowOverwrite === false), true);
 }
 
+// Real create-only collisions use several generic BlobError messages. These
+// are conflicts only for creation, never substitutes for update preconditions.
+{
+  const { sdk } = fixture();
+  for (const message of [
+    'Vercel Blob: This blob already exists, use `allowOverwrite: true` if you want to overwrite it.',
+    'Vercel Blob: The blob already exists. Set allowOverwrite to true to replace it.',
+    'Vercel Blob: A blob with this pathname already exists.',
+    'Vercel Blob: The file at this path already exists.',
+    'Vercel Blob: File already exists',
+    'Vercel Blob: An object with the same key already exists.',
+  ]) {
+    const error = new BlobError(message);
+    const bucket = createBlobBucket({ sdk: { ...sdk, put: async () => { throw error; } } });
+    assert.equal(await bucket.put('existing', 'value', { onlyIf: new Headers({ 'If-None-Match': '*' }) }), null);
+    await assert.rejects(() => bucket.put('existing', 'value'), candidate => candidate === error);
+    await assert.rejects(() => bucket.put('existing', 'value', { onlyIf: new Headers({ 'If-Match': '"revision-1"' }) }), candidate => candidate === error);
+  }
+  for (const error of [
+    new BlobError('Vercel Blob: Store already exists.'),
+    new BlobError('Vercel Blob: Blob store already exists.'),
+    new BlobError('Vercel Blob: A token already exists.'),
+    new BlobError('Vercel Blob: Blob access denied; another resource already exists.'),
+    new BlobError('Vercel Blob: Access denied.'),
+    new BlobError('Vercel Blob: Service unavailable.'),
+    new BlobError('Proxy: This blob already exists.'),
+    new Error('Vercel Blob: This blob already exists.'),
+  ]) {
+    const bucket = createBlobBucket({ sdk: { ...sdk, put: async () => { throw error; } } });
+    await assert.rejects(() => bucket.put('key', 'value', { onlyIf: new Headers({ 'If-None-Match': '*' }) }), candidate => candidate === error);
+  }
+}
+
 // Mutable metadata is never cached, and updates do not carry old metadata over.
 {
   const { bucket } = fixture();

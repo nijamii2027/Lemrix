@@ -266,7 +266,7 @@ async function verifyWebhook(bucket, body, env, fetcher) {
   const signature = createHmac('sha256',config.STRIPE_WEBHOOK_SECRET).update(stamp + '.' + payload).digest('hex');
   const statuses = {};
   for (const [name, value] of [['valid',signature], ['invalid','0'.repeat(64)]]) {
-    const response = await fetcher(origin + '/api/stripe/webhook', {method:'POST', headers:{'Content-Type':'application/json','Stripe-Signature':'t='+stamp+',v1='+value}, body:payload, redirect:'manual',signal:AbortSignal.timeout(20000)});
+    const response = await fetcher(origin + '/api/stripe/webhook', {method:'POST', headers:{'Content-Type':'application/json','Stripe-Signature':'t='+stamp+',v1='+value,...(env.LEMRIX_MIGRATION_STAGING === '1' && body.production !== true ? {'X-Lemrix-Migration':env.LEMRIX_MIGRATION_TOKEN} : {})}, body:payload, redirect:'manual',signal:AbortSignal.timeout(20000)});
     statuses[name] = response.status;
     await response.body?.cancel();
   }
@@ -332,15 +332,20 @@ async function verifyAdmin(bucket, body, env, fetcher, loadApplication) {
   const source = await readSource({ action: 'config' }, env, fetcher);
   if (typeof source.values?.ADMIN_PASSWORD !== 'string') throw new MigrationError();
   const config = await readRuntimeConfig(bucket, env);
-  const module = await loadApplication();
-  const application = module.default || module;
-  if (typeof application.fetch !== 'function') throw new MigrationError();
+  const module = body.publicHttp ? null : await loadApplication();
+  const application = module && (module.default || module);
+  if (!body.publicHttp && typeof application.fetch !== 'function') throw new MigrationError();
+  const origin = !body.publicHttp || body.production === true ? nativeOrigin : (/^[a-z0-9-]+\.vercel\.app$/.test(env.VERCEL_URL || '') ? 'https://' + env.VERCEL_URL : null);
+  if (!origin) throw new MigrationError(409);
   const runtime = { ...config, BUCKET: bucket, SESSION_SECRET: env.SESSION_SECRET, CLIENT_IP: 'migration-check', REQUIRE_STORED_CATALOGUE: true };
-  const call = (path, payload, cookie) => application.fetch(new Request(nativeOrigin + path, {
+  const call = (path, payload, cookie) => {
+    const request = new Request(origin + path, {
     method: payload === undefined ? 'GET' : 'POST',
-    headers: { Origin: nativeOrigin, ...(payload === undefined ? {} : { 'Content-Type': 'application/json' }), ...(cookie ? { Cookie: cookie } : {}) },
+    headers: { Origin: origin, ...(payload === undefined ? {} : { 'Content-Type': 'application/json' }), ...(cookie ? { Cookie: cookie } : {}), ...(body.publicHttp && env.LEMRIX_MIGRATION_STAGING === '1' && body.production !== true ? {'X-Lemrix-Migration':env.LEMRIX_MIGRATION_TOKEN} : {}) },
     ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
-  }), runtime);
+    });
+    return body.publicHttp ? fetcher(request,{redirect:'manual',signal:AbortSignal.timeout(20000)}) : application.fetch(request,runtime);
+  };
   const statuses = {};
   let cookie;
   try {

@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import { timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import application from '../dist/server/index.js';
@@ -60,6 +61,15 @@ function clientIp(request) {
   return typeof address === 'string' && isIP(address) ? address : 'unknown';
 }
 
+function migrationVerification(request, selected, env) {
+  if (!['/api/login','/api/logout','/api/stripe/webhook'].includes(selected.pathname)) return false;
+  const supplied = request.headers['x-lemrix-migration'];
+  const expected = env.LEMRIX_MIGRATION_TOKEN;
+  if (typeof supplied !== 'string' || !/^[a-f0-9]{64}$/.test(supplied) || !/^[a-f0-9]{64}$/.test(expected || '') || Date.parse(env.LEMRIX_MIGRATION_UNTIL || '') <= Date.now()) return false;
+  if (!Number.isFinite(Date.parse(env.LEMRIX_MIGRATION_UNTIL || ''))) return false;
+  return timingSafeEqual(Buffer.from(supplied),Buffer.from(expected));
+}
+
 export function createGateway({env = process.env, app = application, bucket, configLoader = readRuntimeConfig} = {}) {
   let storage = bucket;
   return async function gateway(request, response) {
@@ -72,7 +82,7 @@ export function createGateway({env = process.env, app = application, bucket, con
       const origin = publicOrigin(request, env);
       const selected = route(new URL(request.url, origin).searchParams);
       if (!selected.methods.includes(request.method)) fail(405, 'Method unavailable.');
-      if (env.LEMRIX_MIGRATION_STAGING === '1' && request.method === 'POST') fail(503, 'This preview is read-only while the shop is being migrated.');
+      if (env.LEMRIX_MIGRATION_STAGING === '1' && request.method === 'POST' && !migrationVerification(request,selected,env)) fail(503, 'This preview is read-only while the shop is being migrated.');
       const webhook = selected.pathname === '/api/stripe/webhook';
       if (request.method === 'POST' && !webhook && request.headers.origin !== origin) fail(403, 'Invalid request origin.');
       if (!storage) {
