@@ -14,6 +14,16 @@ Import `nijamii2027/Lemrix` using branch `main` and the repository root. Vercel 
 
 The build copies the shop's scripts, fonts, images and photo tools, but deliberately omits the seed `shop/catalogue.js`. A failed storage connection must not silently show outdated sample stock.
 
+## Custom domains and the links project
+
+`lemrix.com.au` and `www.lemrix.com.au` belong to the `lemrix-surf` project. The apex redirects to `www`; the shop is available at `/shop/`. This project continues to build from the repository root.
+
+`links.lemrix.com.au` belongs to the separate `lemrix-linktree` project, alongside `lemrix-links.vercel.app` and `lemrix-linktree.vercel.app`. Set that project's root directory to `dist/links`, framework to Other, build and install commands to empty, output directory to `.`, and access to source files outside the root directory to disabled. Its nested `vercel.json` publishes only the static links page and preserves older `/links/` URLs. It needs no store credentials or API functions.
+
+The same links source also works at `/links/` on the main website. The main project's redirects add the trailing slash so its relative assets resolve correctly. Keep the links project rooted at `dist/links` when changing deployment settings; importing the full repository there would display the main website at its root.
+
+DNS stays at GoDaddy. Use the target Vercel recommends for each project; the links project and main project have different CNAME targets. Confirm Vercel reports valid DNS configuration and that HTTPS serves the intended page after a change.
+
 ## Runtime configuration
 
 Configure runtime variables on the intended Vercel project and environment. Keep secret values out of `dist/`, browser code, Git and logs.

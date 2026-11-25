@@ -6,6 +6,16 @@
   "outputDirectory": "public",
   "redirects": [
     {
+      "source": "/links",
+      "destination": "/links/",
+      "permanent": false
+    },
+    {
+      "source": "/links/index.html",
+      "destination": "/links/",
+      "permanent": false
+    },
+    {
       "source": "/shop",
       "destination": "/shop/",
       "permanent": false
