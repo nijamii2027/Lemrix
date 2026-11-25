@@ -24,6 +24,11 @@ let mostRecent;
 globalThis.fetch = async (url, {headers, body}) => {
   const path = new URL(url).pathname;
   if (path === '/v1/checkout/sessions') {
+    // Endive rejects the removed payment_method_types create parameter with
+    // HTTP 400. Keep this mock aligned with the pinned API's request contract.
+    assert.equal(body.has('payment_method_types[0]'), false);
+    assert.equal(body.get('allowed_payment_method_types[0]'), 'card');
+    assert.equal(headers['Idempotency-Key'], 'lemrix-endive-' + body.get('metadata[attempt]'));
     const multiple = body.has('line_items[1][quantity]');
     const unit = index => Number(body.get('line_items['+index+'][price_data][unit_amount]'));
     assert.equal(body.get('line_items[0][price_data][currency]'), 'aud');
@@ -91,7 +96,7 @@ const first=attempt(), second=attempt();
 const responses=await Promise.all([request('/api/checkout',first),request('/api/checkout',second)]);
 assert.deepEqual(responses.map(r=>r.status).sort(),[200,409]);
 const winner=responses[0].status===200 ? first : second;
-const selected=sessions.get(attempts.get('lemrix-'+winner.attempt));
+const selected=sessions.get(attempts.get('lemrix-endive-'+winner.attempt));
 assert.equal((await request('/api/checkout',winner)).status,200);
 assert.equal((await shop())[0].copies[1].canBuy,false);
 assert.equal((await shop())[0].checkoutHolds,undefined);
@@ -173,3 +178,35 @@ await event(cartSession);
 assert.equal(await balance(),0);
 assert.equal((await request(rewards+'/art/last-showing',null,member)).status,403);
 console.log('Verified rewards enrolment, recovery, protected artwork, shipping exclusion, duplicate webhook protection and partial/full refunds.');
+
+// A Stripe rejection must preserve safe support diagnostics without exposing
+// its raw error message, credentials or customer details to logs or shoppers.
+const stripeFetch = globalThis.fetch;
+const originalConsoleError = console.error;
+const stripeErrors = [];
+const stockBeforeError = bucket.get('store/v1/catalogue.json').value;
+const privateErrorMessage = 'DO_NOT_LOG_customer@example.com sk_test_fixture-secret';
+globalThis.fetch = async () => Response.json({error:{
+  type:'invalid_request_error',
+  code:'payment_method_types_no_longer_supported',
+  param:'payment_method_types',
+  message:privateErrorMessage,
+}}, {status:400, headers:{'Request-Id':'req_fixtureFailure'}});
+console.error = (...args) => stripeErrors.push(args);
+try {
+  const failure = await request('/api/checkout/status', {session:cartSession.id});
+  assert.equal(failure.status, 502);
+  assert.deepEqual(await failure.json(), {error:'Stripe could not complete this request. Try again shortly.'});
+  assert.equal(bucket.get('store/v1/catalogue.json').value, stockBeforeError);
+  const logged = JSON.stringify(stripeErrors);
+  for (const value of ['invalid_request_error','payment_method_types_no_longer_supported','payment_method_types','req_fixtureFailure']) {
+    assert.ok(logged.includes(value), 'Stripe diagnostics retain ' + value);
+  }
+  assert.match(logged, /\b400\b/);
+  assert.ok(!logged.includes(privateErrorMessage));
+  assert.ok(!logged.includes(env.STRIPE_SECRET_KEY));
+} finally {
+  globalThis.fetch = stripeFetch;
+  console.error = originalConsoleError;
+}
+console.log('Verified Endive payment-method parameters and sanitized Stripe failure diagnostics without stock changes.');

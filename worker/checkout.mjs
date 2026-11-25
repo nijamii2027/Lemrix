@@ -26,7 +26,20 @@ async function stripeRequest(env, path, form, requestId) {
   const response = await fetch('https://api.stripe.com/v1/' + path, {
     method: form ? 'POST' : 'GET', headers, body: form
   });
-  if (!response.ok) reject(502, 'Stripe could not complete this request. Try again shortly.');
+  if (!response.ok) {
+    const result = await response.json().catch(() => null);
+    const error = result?.error;
+    const safe = (value, pattern) => typeof value === 'string' && pattern.test(value) ? value : null;
+    // Keep diagnostics useful without logging credentials, customer data or raw messages.
+    console.error('Stripe API request failed', {
+      status: response.status,
+      type: safe(error?.type, /^[a-z_]{1,80}$/),
+      code: safe(error?.code, /^[a-z0-9_]{1,80}$/),
+      param: safe(error?.param, /^[a-zA-Z0-9_.\[\]]{1,160}$/),
+      requestId: safe(response.headers.get('Request-Id'), /^req_[a-zA-Z0-9]{1,100}$/)
+    });
+    reject(502, 'Stripe could not complete this request. Try again shortly.');
+  }
   return response.json();
 }
 async function updateStock(env, initial, change) {
@@ -135,7 +148,7 @@ async function startCheckout(env, initial, body, origin, request) {
   const order = priceOrder(items,lines,mode);
   const returnHash = body.lines ? '#cart' : '#item/' + encodeURIComponent(order[0].item.id);
   const details = new URLSearchParams({
-    mode:'payment', 'payment_method_types[0]':'card',
+    mode:'payment', 'allowed_payment_method_types[0]':'card',
     'shipping_address_collection[allowed_countries][0]':'AU', 'metadata[store]':checkoutStore,
     'metadata[item_id]':order[0].item.id, 'metadata[attempt]':body.attempt,
     'success_url':origin + '/shop/?checkout={CHECKOUT_SESSION_ID}&attempt=' + body.attempt + returnHash,
@@ -160,7 +173,8 @@ async function startCheckout(env, initial, body, origin, request) {
   // Derive expiry from a client attempt time so retries send identical Stripe parameters.
   if (!Number.isSafeInteger(body.started) || Math.abs(Date.now()/1000 - body.started) > 600) reject(400, 'Start a new checkout.');
   details.set('expires_at', String(body.started + 45 * 60));
-  const session = await stripeRequest(env, 'checkout/sessions', details, 'lemrix-' + body.attempt);
+  // A new request schema must not replay failures cached under the retired schema.
+  const session = await stripeRequest(env, 'checkout/sessions', details, 'lemrix-endive-' + body.attempt);
   if (!stripeSessionId.test(session.id) || session.status !== 'open' || !session.url ||
       new URL(session.url).origin !== 'https://checkout.stripe.com' || session.livemode !== (mode === 'live'))
     reject(502, 'Stripe checkout is unavailable.');
