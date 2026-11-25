@@ -6,7 +6,7 @@ import application from '../dist/server/index.js';
 import { createBlobBucket } from '../lib/blob-bucket.mjs';
 import { readRuntimeConfig } from '../lib/runtime-config.mjs';
 
-const PUBLIC_ORIGINS = new Set(['https://lemrix.vercel.app', 'https://lemrix-surf.vercel.app']);
+const PUBLIC_ORIGINS = new Set(['https://lemrix.vercel.app', 'https://lemrix-surf.vercel.app', 'https://lemrix.com.au', 'https://www.lemrix.com.au']);
 const COOKIE_NAMES = new Set(['__Host-lemrix-admin', '__Host-lemrix-customer', '__Host-lemrix-google', '__Host-lemrix-pass']);
 const READ_ONLY = new Set(['account', 'customer/session', 'rewards', 'rewards/code', 'rewards/art/hill-club', 'rewards/art/last-showing', 'rewards/art/after-hours']);
 const WRITE_ONLY = new Set(['login', 'logout', 'logout-all', 'items/push', 'images', 'customer/challenge', 'customer/google', 'customer/logout', 'rewards/join', 'rewards/recover', 'checkout', 'checkout/status', 'checkout/cancel', 'stripe/webhook']);

@@ -82,11 +82,31 @@ function fixture() {
   for (const call of calls.filter(call => call.method === 'get')) {
     assert.equal(call.options.access, 'private');
     assert.equal(call.options.useCache, false);
+    assert.deepEqual(call.options.headers, { 'accept-encoding': 'identity' });
   }
   for (const call of calls.filter(call => call.method === 'put')) {
     assert.equal(call.options.access, 'private');
     assert.equal(call.options.addRandomSuffix, false);
   }
+}
+
+// Larger JSON responses may be compressed by delivery infrastructure. Require
+// identity encoding instead of promoting a weak transfer ETag into a CAS token.
+{
+  const { sdk } = fixture();
+  const compressedSdk = { ...sdk, async get(path, options) {
+    const result = await sdk.get(path, options);
+    if (result && options.headers?.['accept-encoding'] !== 'identity') result.blob.etag = 'W/' + result.blob.etag;
+    return result;
+  } };
+  const bucket = createBlobBucket({ sdk: compressedSdk });
+  const key = 'store/v2/runtime/config.json';
+  const value = { ciphertext: 'fixture-encrypted-value'.repeat(600) };
+  await bucket.put(key, JSON.stringify(value));
+  const object = await bucket.get(key);
+  assert.deepEqual(await object.json(), value);
+  assert.equal((await bucket.head(key)).etag, object.etag);
+  assert.ok(await bucket.put(key, JSON.stringify({ ...value, updated: true }), { onlyIf: new Headers({ 'If-Match': '"' + object.etag + '"' }) }));
 }
 
 // Only one concurrent stock writer with the same ETag can succeed. The loser

@@ -187,4 +187,68 @@ contended.env.BUCKET.put = async (key, ...rest) => key.startsWith(ratePrefix) ? 
 assert.equal((await contended.call('/api/login', credentials)).status, 503, 'Unavailable atomic rate storage fails closed');
 assert.equal(contended.records.size, 0);
 
+// BEGIN TEMPORARY MIGRATION STAGING CATALOGUE TEST.
+// Remove this block with the staging guard after the migration is complete.
+{
+  const staged = fixture();
+  Object.assign(staged.env, {
+    LEMRIX_MIGRATION_STAGING:'1', REQUIRE_STORED_CATALOGUE:true,
+    STRIPE_SECRET_KEY:'sk_live_fixture', STRIPE_WEBHOOK_SECRET:'whsec_fixture', STRIPE_SHIPPING_RATE:'free',
+  });
+  const catalogueKey = 'store/v1/catalogue.json';
+  const passId = 'a'.repeat(64);
+  const rewardsKey = 'store/v1/rewards/' + passId + '.json';
+  const paidAttempt = randomUUID(), expiredAttempt = randomUUID();
+  const paidSession = 'cs_live_stagingPaid123456789', expiredSession = 'cs_live_stagingExpired123456789';
+  const catalogue = [{
+    id:'staging-held-copies', name:'Staging held copies', category:'Singles', quantity:2, revision:7,
+    copies:[{cents:850, condition:'Near mint', sold:false}, {cents:950, condition:'Near mint', sold:false}],
+    checkoutHolds:[
+      {session:paidSession, attempt:paidAttempt, copy:0, cents:850, expires:Math.floor(Date.now() / 1000) - 60},
+      {session:expiredSession, attempt:expiredAttempt, copy:1, cents:950, expires:Math.floor(Date.now() / 1000) - 60},
+    ],
+  }];
+  await staged.env.BUCKET.put(catalogueKey, JSON.stringify(catalogue));
+  await staged.env.BUCKET.put(rewardsKey, JSON.stringify({orders:{}}));
+  const catalogueBefore = staged.records.get(catalogueKey), rewardsBefore = staged.records.get(rewardsKey);
+  const save = staged.env.BUCKET.put;
+  let writes = 0;
+  staged.env.BUCKET.put = async (...args) => {writes++; return save(...args);};
+  const stripeQueries = [];
+  const fetchBeforeStaging = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    stripeQueries.push(url);
+    assert.equal(options.method, 'GET');
+    const id = url.slice('https://api.stripe.com/v1/checkout/sessions/'.length);
+    assert.ok([paidSession, expiredSession].includes(id));
+    return Response.json({id, livemode:true, currency:'aud', amount_subtotal:id === paidSession ? 850 : 950,
+      status:id === paidSession ? 'complete' : 'expired', payment_status:id === paidSession ? 'paid' : 'unpaid',
+      metadata:{store:'lemrix-illustrated', attempt:id === paidSession ? paidAttempt : expiredAttempt, reward_pass:passId}});
+  };
+  try {
+    const preview = await staged.call('/shop/catalogue.js');
+    assert.equal(preview.status, 200);
+    assert.equal(stripeQueries.length, 0, 'Staging catalogue reads cannot refresh expired checkout holds');
+    assert.equal(writes, 0, 'Staging reads cannot write catalogue or rewards');
+    assert.equal(staged.records.get(catalogueKey), catalogueBefore);
+    assert.equal(staged.records.get(rewardsKey), rewardsBefore);
+    assert.deepEqual(await catalogueBefore.json(), catalogue);
+    const conservative = runInNewContext(await preview.text() + ';products')[0];
+    assert.equal(conservative.quantity, 0);
+    assert.equal(conservative.copies.every(copy => !copy.canBuy), true);
+
+    delete staged.env.LEMRIX_MIGRATION_STAGING;
+    assert.equal((await staged.call('/shop/catalogue.js')).status, 200);
+    assert.equal(stripeQueries.length, 2, 'Production continues refreshing both due reservations');
+    const settled = (await staged.records.get(catalogueKey).json())[0];
+    assert.equal(settled.quantity, 1);
+    assert.equal(settled.revision, 9);
+    assert.equal(settled.copies[0].sold, true);
+    assert.equal(settled.copies[1].sold, false);
+    assert.deepEqual(settled.checkoutHolds, []);
+    assert.deepEqual(await staged.records.get(rewardsKey).json(), {orders:{[paidAttempt]:{subtotal:850}}});
+  } finally {globalThis.fetch = fetchBeforeStaging;}
+}
+// END TEMPORARY MIGRATION STAGING CATALOGUE TEST.
+
 console.log('Verified native password-only admin login, signed secure sessions, forged-identity rejection, expiry/rotation/logout-all, exact-origin CSRF, persistent concurrent rate limits, stored-only production catalogue and same-origin Stripe returns.');

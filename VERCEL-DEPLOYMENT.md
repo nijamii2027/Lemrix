@@ -32,6 +32,8 @@ The private store holds the catalogue (including stock reservations), uploaded i
 
 Staff sign in directly using the Lemrix username and password. A successful password check creates a secure server session for editing the shop. No separate platform sign-in or authentication bridge is involved.
 
+The API accepts the project's `lemrix.vercel.app`, `lemrix-surf.vercel.app`, `lemrix.com.au`, and `www.lemrix.com.au` origins, plus Vercel's exact deployment and branch hostnames supplied by the platform. Browser writes must come from the same origin as the request. When attaching another custom domain, add its HTTPS origin to `PUBLIC_ORIGINS` in `api/gateway.mjs` and redeploy.
+
 Customer sessions and browser storage belong to each domain. Existing carts and browser-only demo accounts from another domain do not automatically appear on Vercel. Collector passes can be restored using their existing recovery codes when their records have been migrated. Customer username accounts and offers labelled as demos remain browser-local; Google sign-in uses verified server sessions when configured.
 
 ## Verify after deployment

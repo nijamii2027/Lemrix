@@ -311,6 +311,105 @@ try {
     privateResponse(result);
   });
 
+  // BEGIN TEMPORARY MIGRATION STAGING TESTS.
+  // Remove this entire block with the staging gate, migration environment
+  // variables and controller after production verification. The 15 permanent
+  // gateway checks above do not depend on this temporary mechanism.
+  {
+    const stagingHost = 'lemrix-fixture-gate.vercel.app';
+    const stagingOrigin = 'https://' + stagingHost;
+    const migrationToken = 'ab'.repeat(32);
+    const stagingEnv = () => ({
+      VERCEL_URL:stagingHost, LEMRIX_MIGRATION_STAGING:'1', LEMRIX_MIGRATION_TOKEN:migrationToken,
+      LEMRIX_MIGRATION_UNTIL:new Date(Date.now() + 3600000).toISOString(),
+    });
+    const stagingPost = (token, {origin = stagingOrigin, signature} = {}) => ({
+      method:'POST', body:'{"fixture":"migration-verification"}', headers:{
+        Host:stagingHost, 'Content-Type':'application/json',
+        ...(origin === null ? {} : {Origin:origin}),
+        ...(token === null ? {} : {'X-Lemrix-Migration':token}),
+        ...(signature ? {'Stripe-Signature':signature} : {}),
+      },
+    });
+
+    await test('TEMPORARY staging permits only token-authenticated verification endpoints', async () => {
+      reset({env:stagingEnv()});
+      for (const path of ['login', 'logout', 'stripe/webhook']) {
+        const webhook = path === 'stripe/webhook';
+        const signature = 't=1800000000,v1=fixture-verification-signature';
+        const result = await call(api(path), stagingPost(migrationToken, webhook ? {origin:null, signature} : {}));
+        assert.equal(result.status, 200);
+        assert.equal(calls.at(-1).request.url, stagingOrigin + '/api/' + path);
+        assert.equal(calls.at(-1).request.headers.get('x-lemrix-migration'), null, 'Migration authorization stays outside the application request');
+        assert.equal(calls.at(-1).bytes.toString(), '{"fixture":"migration-verification"}');
+        if (webhook) {
+          assert.equal(calls.at(-1).request.headers.get('Origin'), null);
+          assert.equal(calls.at(-1).request.headers.get('Stripe-Signature'), signature);
+        }
+        privateResponse(result);
+      }
+      assert.equal(calls.length, 3);
+      assert.equal(configCalls.length, 3);
+    });
+
+    await test('TEMPORARY staging rejects missing, wrong, malformed or expired authorization before application work', async () => {
+      const cases = [
+        {token:null}, {token:'cd'.repeat(32)}, {token:'short'}, {token:migrationToken + '0'},
+        {token:migrationToken, env:{LEMRIX_MIGRATION_TOKEN:undefined}},
+        {token:migrationToken, env:{LEMRIX_MIGRATION_TOKEN:'invalid-secret'}},
+        {token:migrationToken, env:{LEMRIX_MIGRATION_UNTIL:new Date(Date.now() - 60000).toISOString()}},
+        {token:migrationToken, env:{LEMRIX_MIGRATION_UNTIL:undefined}},
+        {token:migrationToken, env:{LEMRIX_MIGRATION_UNTIL:'not-a-date'}},
+      ];
+      for (const fixture of cases) {
+        reset({env:{...stagingEnv(), ...fixture.env}});
+        for (const path of ['login', 'logout', 'stripe/webhook']) {
+          const result = await call(api(path), stagingPost(fixture.token));
+          assert.equal(result.status, 503);
+          assert.ok(!result.text.includes(migrationToken));
+          privateResponse(result);
+        }
+        assert.equal(calls.length, 0);
+        assert.equal(configCalls.length, 0);
+      }
+    });
+
+    await test('TEMPORARY staging rejects every other POST even with the verification token', async () => {
+      reset({env:stagingEnv()});
+      for (const path of [
+        'logout-all', 'items', 'items/push', 'images', 'customer/challenge', 'customer/google',
+        'customer/logout', 'rewards/join', 'rewards/recover', 'checkout', 'checkout/status', 'checkout/cancel',
+      ]) {
+        const result = await call(api(path), stagingPost(migrationToken));
+        assert.equal(result.status, 503, path);
+        privateResponse(result);
+      }
+      assert.equal(calls.length, 0);
+      assert.equal(configCalls.length, 0);
+      for (const path of ['account', 'items', 'rewards']) {
+        assert.equal((await call(api(path), {headers:{Host:stagingHost}})).status, 200);
+      }
+      assert.equal(calls.length, 3, 'Ordinary GET routes remain available without migration authorization');
+    });
+
+    await test('TEMPORARY verification token cannot bypass CSRF and inactive staging leaves production writes unchanged', async () => {
+      reset({env:stagingEnv()});
+      for (const path of ['login', 'logout']) {
+        for (const origin of ['https://attacker.example', ORIGIN, null]) {
+          assert.equal((await call(api(path), stagingPost(migrationToken, {origin}))).status, 403);
+        }
+      }
+      assert.equal(calls.length, 0);
+      assert.equal(configCalls.length, 0);
+      for (const active of [undefined, '0']) {
+        reset({env:{...stagingEnv(), LEMRIX_MIGRATION_STAGING:active}});
+        assert.equal((await call(api('checkout'), stagingPost(null))).status, 200);
+        assert.equal(calls.length, 1);
+      }
+    });
+  }
+  // END TEMPORARY MIGRATION STAGING TESTS.
+
   assert.equal(outboundCalls.length, 0, 'Native gateway must never proxy to any external backend');
   console.log('Passed ' + passed + ' native Vercel gateway checks: Web Request/context mapping, exact hosts/routes/origins, trusted IP, header/cookie isolation, raw webhooks, secure multi-cookie responses, HEAD/binary streaming, upload bounds and fail-closed storage. No external requests.');
 } finally {

@@ -299,13 +299,13 @@ async function probe(bucket) {
   let result;
   let stage = 'create-only';
   try {
-    const values = ['create-a', 'create-b'];
+    const values = ['create-a', 'create-b'].map(value => value.repeat(2048));
     const created = await Promise.all(values.map(value => bucket.put(key, value, { onlyIf: new Headers({ 'If-None-Match': '*' }) })));
     if (created.filter(Boolean).length !== 1) throw new MigrationError();
     stage = 'read-created';
     const first = await bucket.get(key);
     if (!first || await first.text() !== values[created.findIndex(Boolean)]) throw new MigrationError();
-    const updates = ['update-a', 'update-b'];
+    const updates = ['update-a', 'update-b'].map(value => value.repeat(2048));
     stage = 'compare-and-swap';
     const written = await Promise.all(updates.map(value => bucket.put(key, value, { onlyIf: new Headers({ 'If-Match': '"' + first.etag + '"' }) })));
     if (written.filter(Boolean).length !== 1) throw new MigrationError();
