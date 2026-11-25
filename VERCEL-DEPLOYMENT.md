@@ -1,13 +1,20 @@
 # Deploy Lemrix to Vercel
 
-1. In Vercel, choose **Add New → Project** and import `nijamii2027/Lemrix`. To reuse the existing Lemrix Vercel project, connect the repo from **Settings → Git** in that project.
-2. Keep the root directory set to the repository root. `vercel.json` serves `dist/` without an install or build step. No environment variables are required.
-3. Deploy. Check `/`, `/shop/` and `/menu/` at the deployment URL.
+Import `nijamii2027/Lemrix` using branch `main` and the repository root. Vercel reads the build command and output directory from `vercel.json`. The frontend build needs Node.js and has no package dependencies or environment variables.
 
-For an existing Vercel project connected to this repository, subsequent pushes to its production branch deploy automatically. You can also run `vercel --prod` from the repository root with the project linked to your Vercel CLI.
+## Where pages run
 
-## Enquiries and browser storage
+| Entry point | Behaviour |
+| --- | --- |
+| `/` | Vercel serves the illustrated landing page and its local fonts, animations and video. |
+| `/after-hours/` | The original page opens the After Hours scene on the landing page. |
+| `/shop/` | The browser opens the operating Lemrix store on its existing origin. Product and cart fragments and checkout query parameters follow the redirect. |
+| `/admin/` | The browser opens the existing shop account page for owner sign-in. |
 
-`api/enquiries.mjs` forwards submissions to the live Lemrix Sites backend. Both deployments use the existing `enquiries` inbox, so keep that backend running. Shopify can be enabled later using the [Shopify handoff](SHOPIFY-HANDOFF.md).
+The shop uses its current inventory, uploaded images, account cookies, rewards ledger and payment settings. Keep the existing Lemrix TCG site online. Sign-ins, carts and Stripe callbacks continue on that origin. The browser crosses domains when opening the shop from Vercel, so its same-origin landing-to-shop animation cannot span that navigation. Subsequent navigation follows the shop's own links.
 
-Lucky Dip rewards, cooldowns and site motion preferences are stored per domain by the browser. Visitors moving to a different domain start with fresh browser storage.
+## Verify after import
+
+Open the landing page, play the embedded video, scroll to After Hours and open Shop. Check that the catalogue appears on the existing shop domain. Open an existing product bookmark and the admin shortcut. The current backend controls whether checkout is available.
+
+[Operating Lemrix shop](https://lemrix-tcg-illustrated.beefybag2.chatgpt.site/shop/)

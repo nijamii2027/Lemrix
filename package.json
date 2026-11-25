@@ -1,0 +1,10 @@
+{
+  "name": "lemrix-store",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-vercel.mjs",
+    "build:sites": "node scripts/build-hosted.mjs",
+    "test": "node scripts/build-hosted.mjs --test-art && node scripts/test-shop-editor.mjs && node scripts/test-customer.mjs && node scripts/test-checkout.mjs"
+  }
+}

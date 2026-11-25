@@ -1,0 +1,17 @@
+.mast .wordmark {position:relative;isolation:isolate}
+.mast .wordmark [data-store-emblem] {position:relative;z-index:1}
+.shop-logo-peek {display:contents;pointer-events:none;user-select:none}
+.shop-logo-peek[hidden],html[data-motion="reduced"] .shop-logo-peek {display:none}
+.shop-logo-peek canvas {
+  position:absolute;
+  display:block;
+  top:-15.20%;
+  left:50%;
+  height:60.1824%;
+  width:auto;
+  aspect-ratio:264/198;
+  transform:translateX(-55.3%);
+  pointer-events:none;
+}
+.shop-logo-peek .peek-head {z-index:0}
+.shop-logo-peek .peek-hands {z-index:2}

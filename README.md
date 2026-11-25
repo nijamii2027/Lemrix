@@ -1,15 +1,17 @@
 # Lemrix TCG
 
-The storefront lives in `dist/`. The homepage contains the Cook’d × Lemrix comic, live breaks, Lucky Dip and the card enquiry form. `/shop/` links to current eBay and Whatnot listings. `/menu/` is a sample café menu. Both use the shared navigation and enquiry form.
+The illustrated storefront source matches Lemrix TCG publication 26 (source commit `159d6e5244b8740b66da9da1d9816a99abf51fc9`). It includes the landing page, After Hours, shop, card photo tools, staff editor, rewards and checkout.
 
-## Vercel deployment
+## Vercel
 
-Import the GitHub repo in Vercel and deploy from its root. The checked-in configuration serves `dist/` and forwards enquiries to the existing Lemrix inbox. See the [deployment guide](VERCEL-DEPLOYMENT.md).
+Import the repository from its root. The checked-in configuration builds the landing page and After Hours with their original HTML, scripts, fonts and media. Shop and admin links open the operating store on its existing domain. See the [deployment notes](VERCEL-DEPLOYMENT.md).
 
-## Sites deployment
+## Development
 
-Run `node scripts/build-sites.mjs` to copy the storefront into the Worker’s static assets directory. `worker/index.js` handles enquiry submissions and `drizzle/` contains the D1 migration. The production Sites project provides the `DB` binding.
+Use Node.js 24. The scripts run with Node's standard library.
 
-Enquiries are recorded in `enquiries`. Site owners can read them in the site’s database viewer and reply using the submitted email. There is no email notification service configured.
+- `npm run build` creates the Vercel static output in `public/`.
+- `npm test` exercises staff sign-in, shop editing, Google account handling, inventory reservations, Stripe webhook handling and rewards with test data and sample artwork.
+- `npm run build:sites` builds the original Worker from `worker/`, `dist/` and the private reward originals in `rewards/prints/`. The originals are supplied separately for an authorised backend build. The store currently serves them through its rewards API.
 
-Shopify settings are in `dist/shopify-config.js`. See [Shopify handoff](SHOPIFY-HANDOFF.md) for integration details. The source imagery and its attribution are documented in [Brand notes](BRAND-NOTES.md).
+The earlier storefront is available in the repository history at `d540507a2bf9bfb9c1c1253f482c2a83654b48ad`.
