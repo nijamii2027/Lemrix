@@ -297,19 +297,27 @@ async function reconcile(bucket, body, env, fetcher) {
 async function probe(bucket) {
   const key = 'store/v2/migration/probe-' + randomUUID();
   let result;
+  let stage = 'create-only';
   try {
     const values = ['create-a', 'create-b'];
     const created = await Promise.all(values.map(value => bucket.put(key, value, { onlyIf: new Headers({ 'If-None-Match': '*' }) })));
     if (created.filter(Boolean).length !== 1) throw new MigrationError();
+    stage = 'read-created';
     const first = await bucket.get(key);
     if (!first || await first.text() !== values[created.findIndex(Boolean)]) throw new MigrationError();
     const updates = ['update-a', 'update-b'];
+    stage = 'compare-and-swap';
     const written = await Promise.all(updates.map(value => bucket.put(key, value, { onlyIf: new Headers({ 'If-Match': '"' + first.etag + '"' }) })));
     if (written.filter(Boolean).length !== 1) throw new MigrationError();
+    stage = 'read-updated';
     const latest = await bucket.get(key);
     if (!latest || latest.etag === first.etag || await latest.text() !== updates[written.findIndex(Boolean)]) throw new MigrationError();
     result = { createOnlyWinners: 1, casWinners: 1, consistentRead: true };
+  } catch (error) {
+    const categories = ['already exists', 'ETag', 'token', 'access', 'Unexpected private Blob response', 'Invalid Blob', 'fetch failed'];
+    result = {failedStage:stage, errorType:/^[A-Za-z0-9_]{1,80}$/.test(error.name || '') ? error.name : 'Error', category:categories.find(value => String(error.message).includes(value)) || 'unclassified'};
   } finally { await bucket.delete(key); }
+  if (result.failedStage) return result;
   if (await bucket.head(key)) throw new MigrationError();
   return { ...result, deleted: true };
 }
@@ -389,7 +397,7 @@ export function createMigrationHandler({ env = process.env, createBucket = creat
         const verification = await verifyAdmin(bucket, body, env, fetcher, loadApplication);
         return reply(response, verification.verified ? 200 : 502, verification.statuses);
       }
-      return reply(response, 200, result);
+      return reply(response, result?.failedStage ? 502 : 200, result);
     } catch (error) {
       // Source responses, passwords, cookies, configuration values and keys must
       // never reach logs or error responses, even when a dependency throws.
