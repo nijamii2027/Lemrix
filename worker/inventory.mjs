@@ -153,7 +153,7 @@ export async function handleInventory(request, env, initial) {
       const methods = {
         '/api/login':['POST'], '/api/logout':['POST'], '/api/logout-all':['POST'], '/api/account':['GET'],
         '/api/items':['GET','POST'], '/api/items/push':['POST'], '/api/images':['POST'],
-        '/api/customer/session':['GET'], '/api/customer/challenge':['POST'], '/api/customer/google':['POST'], '/api/customer/logout':['POST'],
+        '/api/customer/session':['GET'], '/api/customer/challenge':['POST'], '/api/customer/google':['POST'], '/api/customer/apple':['POST'], '/api/customer/logout':['POST'],
         '/api/rewards':['GET'], '/api/rewards/code':['GET'], '/api/rewards/join':['POST'], '/api/rewards/recover':['POST'],
         '/api/rewards/art/hill-club':['GET'], '/api/rewards/art/last-showing':['GET'], '/api/rewards/art/after-hours':['GET'],
         '/api/checkout':['POST'], '/api/checkout/status':['POST'], '/api/checkout/cancel':['POST'], '/api/square/webhook':['POST'],

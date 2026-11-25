@@ -63,3 +63,5 @@
 #google-status{line-height:1.45}
 #deal-auth-form .deal-text{margin-top:12px}
 #deal-dialog{max-height:min(86svh,calc(100dvh - 20px),790px)}
+
+.deal-apple:not([hidden]){display:block;width:min(260px,100%);margin:10px auto 0;min-height:44px;border:0;border-radius:24px;background:#000;color:#fff;font:600 15px/1.2 -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer}

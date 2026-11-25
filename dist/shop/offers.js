@@ -19,9 +19,9 @@
     const raw = localStorage.getItem(key);
     try { return raw ? JSON.parse(raw) : null; } catch { return null; }
   }
-  let googleUser = null;
+  let providerUser = null;
   function currentUser() {
-    if (googleUser) return googleUser;
+    if (providerUser) return providerUser;
     try {
       const key = sessionStorage.getItem(sessionKey);
       if (!key) return null;
@@ -106,15 +106,18 @@
   function openAuth(signup = false) {
     const retained = resumeOffer ? ' Your offer draft is saved.' : '';
     show(signup ? 'signup' : 'signin', signup ? 'Create an account' : 'Sign in',
-      (signup ? 'Join with Google, or create a username for this browser demo.' : 'Welcome back to the Lemrix shop.') + retained, ['deal-auth-form']);
+      (signup ? 'Choose a sign-in method, or create a demo username for this browser.' : 'Welcome back to the Lemrix shop.') + retained, ['deal-auth-form']);
     id('deal-pass').value = '';
-    renderGoogleButton();
+    renderProviderButtons();
     id('deal-pass').autocomplete = signup ? 'new-password' : 'current-password';
     id('deal-auth-submit').textContent = signup ? 'Create account' : 'Sign in';
     id('deal-auth-swap').textContent = signup ? 'Already registered? Sign in' : "Don't have an account? Sign up";
   }
   function signedIn(user) {
-    if (user === googleUser) sessionStorage.removeItem(sessionKey);
+    if (user === providerUser) {
+      sessionStorage.removeItem(sessionKey);
+      window.dispatchEvent(new Event('lemrix-customer-session'));
+    }
     else sessionStorage.setItem(sessionKey, user.key);
     nav();
     id('deal-pass').value = '';
@@ -142,7 +145,7 @@
     if (window.shopEditor?.authenticated) { show('staff','Lemrix','Press E in the shop to toggle editing.', ['staff-profile']); return; }
     const user = currentUser();
     if (!user) { openAuth(); return; }
-    show('account', user.name, (user === googleUser ? user.email + '.' : 'Demo account.') + ' Your offers are saved on this browser.', ['deal-profile']);
+    show('account', user.name, (user === providerUser ? user.email + '.' : 'Demo account.') + ' Your offers are saved on this browser.', ['deal-profile']);
     const list = id('deal-offers');
     list.replaceChildren();
     let rows;
@@ -256,62 +259,90 @@
     alertText();
     setDraft(currentUser(), offerChoice, id('deal-amount').value);
   });
-  let googleScript, initialized = 0;
+  let initialized=0, initialization;
+  const scripts=new Map();
   async function customerApi(action,body) {
     const response=await fetch('/api/customer/'+action, body===undefined?{cache:'no-store'}:{
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
     });
     const data=await response.json();
-    if(!response.ok) throw new Error(data.error || 'Google sign-in is unavailable.');
+    if(!response.ok) throw new Error(data.error || 'Customer sign-in is unavailable.');
     return data;
   }
-  function loadGoogle() {
-    if (!googleScript) googleScript=new Promise((resolve,reject)=>{
+  function loadProvider(name,src) {
+    if (!scripts.has(name)) scripts.set(name,new Promise((resolve,reject)=>{
       const script=document.createElement('script');
-      script.src='https://accounts.google.com/gsi/client';
+      script.src=src;
       script.async=true;
       script.onload=resolve;
-      script.onerror=()=>{googleScript=null;script.remove();reject(new Error('Google could not load. Reopen sign-in to retry.'));};
+      script.onerror=()=>{scripts.delete(name);script.remove();reject(new Error(name+' could not load. Reopen sign-in to retry.'));};
       document.head.append(script);
-    });
-    return googleScript;
+    }));
+    return scripts.get(name);
   }
-  let initialization;
-  async function prepareGoogle() {
-    const {client,nonce}=await customerApi('challenge',{});
-    await loadGoogle();
-    window.google.accounts.id.initialize({client_id:client,nonce,auto_select:false,callback:async answer=>{
-      try {
-        const result=await customerApi('google',{credential:answer.credential});
-        googleUser=result.user;
-        initialized=0;
-        signedIn(googleUser);
-      } catch(error){initialized=0;alertText(error.message);renderGoogleButton();}
-    }});
-    initialized=Date.now();
+  async function finishProvider(provider,credential) {
+    try {
+      providerUser=(await customerApi(provider,{credential})).user;
+      signedIn(providerUser);
+    } catch(error){alertText(error.message);}
+    finally {initialized=0;}
   }
-  async function renderGoogleButton() {
+  async function setupProviderButtons() {
+    const {clients,nonce}=await customerApi('challenge',{});
+    const apple=id('apple-button');
+    const tasks=[];
+    if (clients.google) tasks.push((async()=>{
+      await loadProvider('Google','https://accounts.google.com/gsi/client');
+      window.google.accounts.id.initialize({client_id:clients.google,nonce,auto_select:false,
+        callback:answer=>finishProvider('google',answer.credential)});
+    })());
+    if (clients.apple) tasks.push((async()=>{
+      await loadProvider('Apple','https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js');
+      const state=crypto.randomUUID();
+      window.AppleID.auth.init({clientId:clients.apple,scope:'name email',redirectURI:location.origin+'/shop/',state,nonce,usePopup:true});
+      apple.onclick=async()=>{
+        apple.disabled=true;
+        try {
+          const {authorization}=await window.AppleID.auth.signIn();
+          if (authorization?.state!==state || !authorization.id_token) throw new Error('Apple could not confirm the sign-in.');
+          await finishProvider('apple',authorization.id_token);
+        } catch(error) {
+          if (error?.error!=='popup_closed_by_user') alertText(error?.message || 'Apple sign-in was interrupted. Please try again.');
+        } finally {apple.disabled=false;}
+      };
+      apple.hidden=false;
+    })());
+    const settled=await Promise.allSettled(tasks);
+    const errors=settled.filter(outcome=>outcome.status==='rejected').map(outcome=>outcome.reason.message);
+    if (!errors.length) initialized=Date.now();
+    return {google:!!clients.google && settled[0]?.status==='fulfilled',errors};
+  }
+  let available={};
+  async function renderProviderButtons() {
     const container=id('google-button'), status=id('google-status');
     status.textContent='';container.replaceChildren();
     try {
       if (Date.now()-initialized>540000) {
-        initialization ||= prepareGoogle().finally(()=>{initialization=null;});
-        await initialization;
+        id('apple-button').hidden=true;
+        initialization ||= setupProviderButtons().finally(()=>{initialization=null;});
+        available=await initialization;
       }
       if (!['signup','signin'].includes(view)) return;
       container.replaceChildren();
-      window.google.accounts.id.renderButton(container,{theme:'outline',size:'large',shape:'pill',text:view==='signup'?'signup_with':'signin_with',width:260});
+      if (available.google) window.google.accounts.id.renderButton(container,{theme:'outline',size:'large',shape:'pill',text:view==='signup'?'signup_with':'signin_with',width:260});
+      status.textContent=(available.errors || []).join(' ');
     } catch(error){status.textContent=error.message;}
   }
-  async function restoreGoogle(){
-    try {googleUser=(await customerApi('session')).user;nav();if(googleUser && dialog.open && view==='signin' && !resumeOffer) openAccount();} catch {}
+  async function restoreCustomer(){
+    try {providerUser=(await customerApi('session')).user;nav();if(providerUser && dialog.open && view==='signin' && !resumeOffer) openAccount();} catch {}
   }
-  window.addEventListener('pageshow',restoreGoogle);
+  window.addEventListener('pageshow',restoreCustomer);
   id('deal-my-offers').addEventListener('click', openAccount);
   id('deal-logout').addEventListener('click', async () => {
-    if(googleUser) {
+    if(providerUser) {
       try { await customerApi('logout',{}); } catch(error) {alertText(error.message);return;}
-      googleUser=null; initialized=0; window.google?.accounts.id.disableAutoSelect();
+      providerUser=null; initialized=0; window.google?.accounts.id.disableAutoSelect();
+      window.dispatchEvent(new Event('lemrix-customer-session'));
     }
     try { sessionStorage.removeItem(sessionKey); } catch { storageError(); return; }
     nav();
@@ -327,6 +358,7 @@
   };
   window.addEventListener('pageshow', nav);
   window.LemrixOffers = {
+    openCustomerSignIn() { resumeOffer=false; openAuth(); },
     setCopy(item, index = 0) {
       selection = item?.copies?.[index] ? { item, index } : null;
       id('offer-opener').hidden = !selection;
