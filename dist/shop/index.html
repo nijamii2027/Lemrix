@@ -157,9 +157,9 @@
     <header><h2 id="rewards-heading">Lemrix Rewards</h2><button type="button" class="deal-close" data-close aria-label="Close rewards">×</button></header>
     <div class="discount-ticket" aria-label="Upcoming member discount"><span class="discount-name">Member discount<small>Coming soon</small></span><strong>neegy%</strong></div>
     <p id="reward-balance" aria-live="polite"></p><p id="reward-rule">Earn one point per whole Australian dollar spent on products. Collect Lemrix artwork as you go.</p>
-    <button type="button" class="action" id="reward-join">Join rewards</button><div id="reward-prints"></div>
-    <details id="reward-recovery"><summary>Use a collector pass on this device</summary><form id="restore-pass"><label>Recovery code<input type="password" name="code" autocomplete="off" required spellcheck="false" maxlength="90"></label><button type="submit" class="action">Restore pass</button></form></details>
-    <details id="reward-code" hidden><summary>Save your recovery code</summary><p>Keep this code to open your collector pass on another device.</p><button type="button" id="show-code" class="quiet-link">Show my code</button><output id="reward-secret"></output></details>
+    <button type="button" class="action" id="reward-signin" hidden>Sign in for rewards</button>
+    <button type="button" class="action" id="reward-join" hidden>Join rewards</button><div id="reward-prints"></div>
+    <details id="reward-recovery" hidden><summary>Link a previous collector pass</summary><form id="restore-pass"><label>Recovery code<input type="password" name="code" autocomplete="off" required spellcheck="false" maxlength="90"></label><button type="submit" class="action">Link to my account</button></form></details>
     <p role="status" id="reward-notice"></p>
   </dialog>
   <dialog id="search-dialog" aria-labelledby="search-title">

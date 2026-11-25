@@ -11,11 +11,15 @@ await promisify(execFile)(process.execPath, [fileURLToPath(new URL('scripts/buil
 const {default:worker} = await import('../dist/server/index.js?stored-reward-art');
 
 const code = '1'.repeat(32);
+const digest = value => createHash('sha256').update(value).digest('hex');
+const token = 'c'.repeat(64), owner='google/art-fixture';
 const ledgerKey = 'store/v1/rewards/' + createHash('sha256').update(code).digest('hex') + '.json';
 const artworkPrefix = 'store/v2/reward-art/';
 const ids = ['hill-club', 'last-showing', 'after-hours'];
 const bytes = Buffer.from([82, 73, 70, 70, 0, 255, 128, 0, 87, 69, 66, 80, 13, 10, 0, 254]);
 const records = new Map(ids.map((id, index) => [artworkPrefix + id, Buffer.concat([bytes, Buffer.from([index])])]));
+records.set('store/v1/customers/sessions/'+digest(token),Buffer.from(JSON.stringify({expires:Date.now()+60000,user:{key:owner}})));
+records.set('store/v2/rewards/members.json',Buffer.from(JSON.stringify({[digest(owner)]:code})));
 const reads = [];
 const ledger = subtotal => Buffer.from(JSON.stringify({orders:{fixture:{subtotal}}}));
 records.set(ledgerKey, ledger(10000));
@@ -29,9 +33,10 @@ const env = {REQUIRE_STORED_CATALOGUE:true, BUCKET:{
       json:async () => JSON.parse(value.toString())};
   },
 }};
-const call = (id, cookie = '__Host-lemrix-pass=' + code) => worker.fetch(new Request('https://lemrix.vercel.app/api/rewards/art/' + id, {headers:{Cookie:cookie}}), env);
+const call = (id, cookie = '__Host-lemrix-customer=' + token) => worker.fetch(new Request('https://lemrix.vercel.app/api/rewards/art/' + id, {headers:{Cookie:cookie}}), env);
 
 assert.equal((await call('hill-club', '')).status, 401);
+assert.equal((await call('hill-club', '__Host-lemrix-pass='+code)).status, 401);
 assert.ok(!reads.some(key => key.startsWith(artworkPrefix)), 'Anonymous visitors cannot read protected artwork');
 records.set(ledgerKey, ledger(0));
 assert.equal((await call('after-hours')).status, 403);

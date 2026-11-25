@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {randomUUID, createHmac, pbkdf2Sync} from 'node:crypto';
+import {randomUUID, createHash, createHmac, pbkdf2Sync} from 'node:crypto';
 import {runInNewContext} from 'node:vm';
 import worker from '../dist/server/index.js';
 
@@ -16,6 +16,7 @@ const env = {
     return entry && {...entry, json:async () => JSON.parse(entry.value)};
   },
   async head(key) { return bucket.get(key); },
+  async list({prefix}) { return {objects:[...bucket.keys()].filter(k => k.startsWith(prefix)).map(key=>({key})),truncated:false}; },
   async delete(key) { bucket.delete(key); },
   async put(key, value, options={}) {
     const entry = bucket.get(key);
@@ -175,7 +176,10 @@ try {
 } finally { Date.now = realNow; }
 
 const final=attempt();
-assert.equal((await request('/api/checkout',final)).status,200);
+const guestPass = 'f'.repeat(32);
+const guestLedgerKey = 'store/v1/rewards/'+createHash('sha256').update(guestPass).digest('hex')+'.json';
+await env.BUCKET.put(guestLedgerKey, JSON.stringify({orders:{}}));
+assert.equal((await request('/api/checkout',final,{cookie:'__Host-lemrix-pass='+guestPass})).status,200);
 assert.equal((await (await request('/api/checkout/status',{session:final.attempt})).json()).status,'pending');
 const paid=recordPayment(orderByAttempt.get(final.attempt));
 assert.ok((await event(paid,false)).status >= 400);
@@ -191,6 +195,7 @@ paid.amount_money=correctMoney;
 assert.equal((await event(paid)).status,200);
 assert.equal((await event(paid)).status,200);
 assert.equal((await (await request('/api/checkout/status',{session:final.attempt})).json()).status,'paid');
+assert.deepEqual(await (await env.BUCKET.get(guestLedgerKey)).json(), {orders:{}}, 'A guest can pay with an old pass cookie but earns no rewards');
 const after=(await shop())[0];
 assert.equal(after.quantity,1);
 assert.equal(after.copies[1].sold,true);
@@ -221,18 +226,45 @@ assert.equal(cartRows.find(p=>p.id==='soft-landing').quantity,1);
 assert.equal(cartRows.find(p=>p.id==='tide-pack').quantity,2);
 const b=order();
 const rewards='/api/rewards';
-assert.equal((await (await request(rewards)).json()).member,false);
-assert.equal((await request(rewards+'/art/hill-club')).status,401);
+const digest = text => createHash('sha256').update(text).digest('hex');
+const oldCode = 'b'.repeat(32), oldCookie = '__Host-lemrix-pass=' + oldCode;
+const claimedCode = 'a'.repeat(32);
+const existingOwner = 'google/existing';
+for(const value of [oldCode,claimedCode]) await env.BUCKET.put('store/v1/rewards/'+digest(value)+'.json',JSON.stringify({orders:{prior:{subtotal:300}}}));
+await env.BUCKET.put('store/v1/rewards/accounts/'+digest(existingOwner),JSON.stringify({code:claimedCode}));
+async function account(short,key,expires=Date.now()+60000) {
+  const token=short.repeat(64);
+  await env.BUCKET.put('store/v1/customers/sessions/'+digest(token),JSON.stringify({expires,user:{key}}));
+  return {cookie:'__Host-lemrix-customer='+token};
+}
+for(const cookie of ['',oldCookie,adminCookie]){
+  for(const [suffix,body] of [['',null],['/join',{}],['/recover',{code:oldCode}],['/code',null],['/art/hill-club',null]]) {
+    assert.equal((await request(rewards+suffix,body,{cookie})).status,401);
+  }
+}
+const expired=await account('c','google/expired',Date.now()-1);
+assert.equal((await request(rewards,null,expired)).status,401);
+const oldAccount=await account('b',existingOwner), member=await account('1','google/new');
+const other=await account('2','google/other'), rival=await account('3','google/rival');
+assert.equal((await (await request(rewards,null,oldAccount)).json()).points,3);
+assert.equal((await request(rewards+'/recover',{code:claimedCode},member)).status,409,'A previous owner retains their pass');
+assert.equal((await request(rewards+'/recover',{code:oldCode},oldAccount)).status,409,'An existing member cannot acquire another pass');
+const legacyDevice={cookie:other.cookie+'; '+oldCookie};
+assert.equal((await (await request(rewards,null,legacyDevice)).json()).devicePass,true);
+const raced=await Promise.all([request(rewards+'/join',{useDevicePass:true},legacyDevice),request(rewards+'/recover',{code:oldCode},rival)]);
+assert.deepEqual(raced.map(r=>r.status).sort(),[200,409], 'Two simultaneous claims have exactly one owner');
+assert.equal((await raced.find(r=>r.status===200).json()).points,3);
 assert.equal((await request(rewards+'/join',{}, {origin:'https://unrelated.example'})).status,403);
-const join=await request(rewards+'/join',{}),member={cookie:join.headers.get('set-cookie').split(';')[0]};
+const join=await request(rewards+'/join',{},member);
 assert.equal((await join.json()).points,0);
 assert.equal((await request(rewards+'/art/last-showing',null,member)).status,403);
 const print=await request(rewards+'/art/hill-club',null,member);
 assert.equal(print.headers.get('Content-Type'),'image/webp');
 assert.equal(Buffer.from(await print.arrayBuffer()).toString('ascii',8,12),'WEBP');
 const {code}=await (await request(rewards+'/code',null,member)).json();
-assert.equal((await request(rewards+'/recover',{code:'wrong'})).status,400);
-assert.equal((await request(rewards+'/recover',{code})).headers.get('set-cookie').split(';')[0],member.cookie);
+assert.equal((await request(rewards+'/recover',{code:'wrong'},member)).status,400);
+assert.equal((await request(rewards+'/recover',{code},member)).status,200);
+assert.equal((await request(rewards+'/recover',{code},rival)).status,409);
 assert.equal((await request('/api/checkout',b,member)).status,200);
 const cartSession=recordPayment(orderByAttempt.get(b.attempt));
 assert.equal((await event(cartSession)).status,200);

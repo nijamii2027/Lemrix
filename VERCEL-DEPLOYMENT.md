@@ -54,7 +54,7 @@ Staff sign in directly using the Lemrix username and password. A successful pass
 
 The API accepts the project's `lemrix.vercel.app`, `lemrix-surf.vercel.app`, `lemrix.com.au`, and `www.lemrix.com.au` origins, plus Vercel's exact deployment and branch hostnames supplied by the platform. Browser writes must come from the same origin as the request. When attaching another custom domain, add its HTTPS origin to `PUBLIC_ORIGINS` in `api/gateway.mjs` and redeploy.
 
-Customer sessions and browser storage belong to each domain. Existing carts and browser-only demo accounts from another domain do not automatically appear on Vercel. Collector passes can be restored using their existing recovery codes when their records have been migrated. Customer username accounts and offers labelled as demos remain browser-local; Google sign-in uses verified server sessions when configured.
+Customer sessions and browser storage belong to each domain. Existing carts and browser-only demo accounts from another domain do not automatically appear on Vercel. Collector passes and artwork require a verified customer session. Existing linked passes follow the customer account. A signed-in customer can link a previously unclaimed pass using its recovery code or the pass stored on that device. Guest checkout remains available when Square is configured. Customer username accounts and offers labelled as demos remain browser-local; Google sign-in uses verified server sessions when configured.
 
 ## Verify after deployment
 
