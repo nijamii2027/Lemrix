@@ -170,8 +170,7 @@ export async function handleInventory(request, env, initial) {
     if (path==='/shop/catalogue.js' && request.method==='GET') {
       let {items}=await getCatalogue(env,initial);
       const mode = checkoutMode(env);
-      // Temporary staging reads must not settle holds while objects are copied.
-      if (mode === 'live' && env.LEMRIX_MIGRATION_STAGING !== '1') {
+      if (mode === 'live') {
         const due = items.find(item => item.checkoutHolds?.some(h => h.expires <= Date.now()/1000));
         if (due) {
           try {
