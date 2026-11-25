@@ -27,44 +27,87 @@ const env = {
     return {etag};
   }
 }};
-const sessions = new Map(), attempts = new Map();
-let mostRecent;
-globalThis.fetch = async (url, {headers, body}) => {
-  const path = new URL(url).pathname;
-  if (path === '/v1/checkout/sessions') {
-    assert.equal(headers['Stripe-Version'], '2024-06-20');
-    assert.equal(body.get('payment_method_types[0]'), 'card');
-    assert.equal(headers['Idempotency-Key'], 'lemrix-card-' + body.get('metadata[attempt]'));
-    const multiple = body.has('line_items[1][quantity]');
-    const unit = index => Number(body.get('line_items['+index+'][price_data][unit_amount]'));
-    assert.equal(body.get('line_items[0][price_data][currency]'), 'aud');
-    if (multiple) {
-      assert.equal(unit(0),2750);
-      assert.equal(unit(1),850);
-      assert.equal(body.get('line_items[1][quantity]'),'2');
-      assert.match(body.get('success_url'),/#cart$/);
+const links = new Map();
+const orders = new Map();
+const payments = new Map();
+const idempotency = new Map();
+const orderByAttempt = new Map();
+const locationId = 'LTESTAU';
+const money = amount => ({amount, currency:'AUD'});
+
+function squareId() {
+  return randomUUID().replaceAll('-', '');
+}
+function recordPayment(order) {
+  const payment = {
+    id:squareId(), order_id:order.id, location_id:locationId, status:'COMPLETED',
+    amount_money:{...order.total_money}, total_money:{...order.total_money}, refunded_money:money(0),
+  };
+  order.state = 'COMPLETED';
+  order.tenders = [{id:payment.id, payment_id:payment.id, type:'CARD', amount_money:order.total_money}];
+  payments.set(payment.id, payment);
+  return payment;
+}
+
+globalThis.fetch = async (url, options={}) => {
+  const {origin:apiOrigin, pathname} = new URL(url);
+  const sandbox = env.SQUARE_ENVIRONMENT === 'sandbox';
+  assert.equal(apiOrigin, sandbox ? 'https://connect.squareupsandbox.com' : 'https://connect.squareup.com');
+  assert.equal(new Headers(options.headers).get('authorization'), 'Bearer '+env.SQUARE_ACCESS_TOKEN);
+  const method = options.method || 'GET';
+  if (method === 'POST' && pathname === '/v2/online-checkout/payment-links') {
+    const payload = JSON.parse(options.body);
+    assert.ok(payload.idempotency_key);
+    const {order, checkout_options:checkout} = payload;
+    assert.equal(payload.idempotency_key, order.reference_id);
+    assert.equal(order.location_id, locationId);
+    assert.equal(checkout.ask_for_shipping_address, true);
+    assert.equal(checkout.accepted_payment_methods.apple_pay, true);
+    assert.equal(checkout.accepted_payment_methods.google_pay, true);
+    const redirect = new URL(checkout.redirect_url);
+    assert.equal(redirect.origin, origin);
+    assert.equal(redirect.searchParams.get('checkout'), order.reference_id);
+    assert.equal(redirect.searchParams.get('attempt'), order.reference_id);
+    const [first, second] = order.line_items;
+    if (second) {
+      assert.equal(redirect.hash, '#cart');
+      assert.deepEqual(first.base_price_money, money(2750));
+      assert.deepEqual(second.base_price_money, money(850));
+      assert.equal(second.quantity, '2');
     } else {
-      assert.equal(unit(0),2050);
-      assert.match(body.get('line_items[0][price_data][product_data][name]'),/Soft Landing · Copy B · Lightly played/);
+      assert.deepEqual(first.base_price_money, money(2050));
+      assert.match(first.name, /Soft Landing.*Copy B.*Lightly played/);
     }
-    assert.equal(body.get('shipping_address_collection[allowed_countries][0]'), 'AU');
-    const pass=body.get('metadata[reward_pass]');
-    if(pass) {
-      assert.equal(pass,body.get('payment_intent_data[metadata][reward_pass]'));
-      assert.equal(body.get('metadata[attempt]'),body.get('payment_intent_data[metadata][attempt]'));
+    const fee = Number(env.SQUARE_SHIPPING_CENTS);
+    if (fee) assert.deepEqual(checkout.shipping_fee.charge, money(fee));
+    const subtotal = order.line_items.reduce((sum, line) => sum + line.base_price_money.amount * Number(line.quantity), 0);
+    let linkId = idempotency.get(payload.idempotency_key);
+    if (!linkId) {
+      linkId = squareId();
+      const squareOrder = {...order, id:squareId(), state:'OPEN', total_money:money(subtotal+fee), tenders:[]};
+      const link = {id:linkId, order_id:squareOrder.id, url:'https://'+(sandbox?'sandbox.square.link':'square.link')+'/u/'+linkId};
+      orders.set(squareOrder.id, squareOrder);
+      links.set(linkId, link);
+      idempotency.set(payload.idempotency_key, linkId);
+      orderByAttempt.set(order.reference_id, squareOrder);
     }
-    const id = attempts.get(headers['Idempotency-Key']) || 'cs_'+randomUUID().replaceAll('-','');
-    attempts.set(headers['Idempotency-Key'], id);
-    if (!sessions.has(id)) sessions.set(id, {id, url:'https://checkout.stripe.com/c/pay/'+id, status:'open', currency:'aud',
-      amount_subtotal:multiple ? 4450 : 2050, livemode:headers.Authorization.includes('_live_'), payment_status:'unpaid',
-      metadata:{store:'lemrix-illustrated',reward_pass:pass,item_id:body.get('metadata[item_id]'),attempt:body.get('metadata[attempt]')}, expires_at:Number(body.get('expires_at'))});
-    mostRecent = sessions.get(id);
-    return Response.json(mostRecent);
+    const link = links.get(linkId);
+    return Response.json({payment_link:link, related_resources:{orders:[orders.get(link.order_id)]}});
   }
-  const [, , , , id, expire] = path.split('/');
-  const session = sessions.get(id);
-  if (session && expire) session.status = 'expired';
-  return Response.json(session || {}, {status:session ? 200 : 404});
+  const id = pathname.split('/').pop();
+  if (method==='GET' && pathname === '/v2/orders/'+id && orders.has(id)) return Response.json({order:orders.get(id)});
+  if (method==='GET' && pathname === '/v2/payments/'+id && payments.has(id)) return Response.json({payment:payments.get(id)});
+  if (pathname === '/v2/online-checkout/payment-links/'+id && links.has(id)) {
+    const link = links.get(id);
+    if (method==='GET') return Response.json({payment_link:link});
+    if (method==='DELETE') {
+      const order = orders.get(link.order_id);
+      if (order.state==='COMPLETED') return Response.json({errors:[{code:'BAD_REQUEST', category:'INVALID_REQUEST_ERROR'}]}, {status:400});
+      order.state='CANCELED';
+      return Response.json({id, cancelled_order_id:order.id});
+    }
+  }
+  throw new Error('Unexpected Square fixture request: '+method+' '+pathname);
 };
 let adminCookie = '';
 const request = (path, payload, extra={}) => {
@@ -79,14 +122,17 @@ const shop = async (extra) => {
   const text = await (await request('/shop/catalogue.js',null,extra)).text();
   return runInNewContext(text+';products');
 };
-async function event(session, signed=true,type='checkout.session.completed') {
-  const payload = {type,data:{object:session}};
-  const stamp = Math.floor(Date.now()/1000);
-  const signature = createHmac('sha256',env.STRIPE_WEBHOOK_SECRET).update(stamp+'.'+JSON.stringify(payload)).digest('hex');
-  return request('/api/stripe/webhook',payload,{'Stripe-Signature':'t='+stamp+',v1='+(signed ? signature : 'bad')});
+const webhookPath = '/api/square/webhook';
+async function event(object, signed=true, type='payment.updated', signingUrl=origin+webhookPath) {
+  const kind = type.split('.')[0];
+  const payload = {type, event_id:randomUUID(), data:{type:kind, id:object.id, object:{[kind]:object}}};
+  const digest = createHmac('sha256',env.SQUARE_WEBHOOK_SIGNATURE_KEY)
+    .update(signingUrl + JSON.stringify(payload)).digest('base64');
+  return request(webhookPath,payload,{'x-square-hmacsha256-signature':signed ? digest : Buffer.alloc(32).toString('base64')});
 }
 assert.equal((await request('/api/checkout',attempt())).status,503);
-env.STRIPE_SECRET_KEY='sk_test_mock'; env.STRIPE_WEBHOOK_SECRET='fixture';
+Object.assign(env, {SQUARE_ACCESS_TOKEN:'sandbox-fixture', SQUARE_WEBHOOK_SIGNATURE_KEY:'fixture',
+  SQUARE_LOCATION_ID:locationId, SQUARE_ENVIRONMENT:'sandbox', SQUARE_SHIPPING_CENTS:'0'});
 assert.equal((await shop()).find(p => p.id === 'soft-landing').canBuy, true);
 assert.equal((await request('/api/checkout',attempt())).status,200);
 const login = await request('/api/login',{username:'Lemrix',password:fixturePassword});
@@ -95,35 +141,56 @@ adminCookie = login.headers.get('Set-Cookie').split(';')[0];
 assert.equal((await request('/api/checkout',{...attempt(),expectedCents:1})).status,409);
 assert.equal((await request('/api/checkout',{...attempt(),copy:27})).status,409);
 assert.equal((await request('/api/checkout',{...attempt(),itemId:'moon-run'})).status,409);
-assert.equal((await request('/api/checkout',attempt())).status,200);
-mostRecent.status='complete'; mostRecent.payment_status='paid';
-assert.equal((await (await request('/api/checkout/status',{session:mostRecent.id})).json()).status,'test-paid');
-assert.equal(bucket.has('store/v1/catalogue.json'),false, 'Test checkout cannot change live stock.');
+const sandboxOrder=attempt();
+assert.equal((await request('/api/checkout',sandboxOrder)).status,200);
+recordPayment(orderByAttempt.get(sandboxOrder.attempt));
+assert.equal((await (await request('/api/checkout/status',{session:sandboxOrder.attempt})).json()).status,'test-paid');
+assert.equal(bucket.has('store/v1/catalogue.json'),false, 'Sandbox checkout cannot change live stock.');
+adminCookie = '';
 const rows=await shop();
 const product=rows.find(p=>p.id==='soft-landing');
 product.quantity=2; product.revision=1;
 const {canBuy, checkoutMode, ...savedProduct}=product;
 bucket.set('store/v1/catalogue.json',{etag:'seed',value:JSON.stringify([savedProduct])});
-env.STRIPE_SECRET_KEY='sk_live_mock'; env.STRIPE_SHIPPING_RATE='free';
+env.SQUARE_ACCESS_TOKEN='live-fixture'; env.SQUARE_ENVIRONMENT='production'; env.SQUARE_SHIPPING_CENTS='800';
 const first=attempt(), second=attempt();
 const responses=await Promise.all([request('/api/checkout',first),request('/api/checkout',second)]);
 assert.deepEqual(responses.map(r=>r.status).sort(),[200,409]);
 const winner=responses[0].status===200 ? first : second;
-const selected=sessions.get(attempts.get('lemrix-card-'+winner.attempt));
+const selected=orderByAttempt.get(winner.attempt);
 assert.equal((await request('/api/checkout',winner)).status,200);
 assert.equal((await shop())[0].copies[1].canBuy,false);
 assert.equal((await shop())[0].checkoutHolds,undefined);
 assert.equal((await request('/api/checkout/cancel',{itemId:winner.itemId,attempt:winner.attempt})).status,200);
-assert.equal(selected.status,'expired');
+assert.equal(selected.state,'CANCELED');
 assert.equal((await shop())[0].copies[1].canBuy,true);
+const expiring=attempt();
+assert.equal((await request('/api/checkout',expiring)).status,200);
+assert.equal((await shop())[0].copies[1].canBuy,false);
+const realNow = Date.now;
+try {
+  Date.now = () => realNow() + 60*60*1000;
+  assert.equal((await shop())[0].copies[1].canBuy,true);
+  assert.equal(orderByAttempt.get(expiring.attempt).state,'CANCELED');
+} finally { Date.now = realNow; }
+
 const final=attempt();
 assert.equal((await request('/api/checkout',final)).status,200);
-const paid=mostRecent;
-paid.status='complete'; paid.payment_status='paid';
-assert.equal((await event(paid,false)).status,400);
+assert.equal((await (await request('/api/checkout/status',{session:final.attempt})).json()).status,'pending');
+const paid=recordPayment(orderByAttempt.get(final.attempt));
+assert.ok((await event(paid,false)).status >= 400);
+assert.ok((await event(paid,true,'payment.updated','https://other.example'+webhookPath)).status >= 400);
+assert.equal(Boolean((await shop())[0].copies[1].sold),false);
+const correctMoney = paid.amount_money;
+for (const wrongMoney of [money(correctMoney.amount-1), {amount:correctMoney.amount, currency:'USD'}]) {
+  paid.amount_money=wrongMoney;
+  assert.equal((await event(paid)).status,409);
+  assert.equal(Boolean((await shop())[0].copies[1].sold),false);
+}
+paid.amount_money=correctMoney;
 assert.equal((await event(paid)).status,200);
 assert.equal((await event(paid)).status,200);
-assert.equal((await (await request('/api/checkout/status',{session:paid.id})).json()).status,'paid');
+assert.equal((await (await request('/api/checkout/status',{session:final.attempt})).json()).status,'paid');
 const after=(await shop())[0];
 assert.equal(after.quantity,1);
 assert.equal(after.copies[1].sold,true);
@@ -167,11 +234,10 @@ const {code}=await (await request(rewards+'/code',null,member)).json();
 assert.equal((await request(rewards+'/recover',{code:'wrong'})).status,400);
 assert.equal((await request(rewards+'/recover',{code})).headers.get('set-cookie').split(';')[0],member.cookie);
 assert.equal((await request('/api/checkout',b,member)).status,200);
-const cartSession=mostRecent;
-Object.assign(cartSession,{status:'complete',payment_status:'paid'});
+const cartSession=recordPayment(orderByAttempt.get(b.attempt));
 assert.equal((await event(cartSession)).status,200);
 assert.equal((await event(cartSession)).status,200);
-const receipt=await (await request('/api/checkout/status',{session:cartSession.id})).json();
+const receipt=await (await request('/api/checkout/status',{session:b.attempt})).json();
 assert.equal(receipt.attempt,b.attempt);
 cartRows=await shop();
 assert.equal(cartRows.find(p=>p.id==='soft-landing').copies[0].sold,true);
@@ -182,44 +248,40 @@ const balance=async()=>(await (await request(rewards,null,member)).json()).point
 assert.equal(await balance(),44);
 assert.equal((await request(rewards+'/art/last-showing',null,member)).status,200);
 assert.equal((await request(rewards+'/art/after-hours',null,member)).status,403);
-const refund={...cartSession,amount_refunded:1550};
-assert.equal((await event(refund,true,'charge.refunded')).status,200);
-assert.equal((await event(refund,true,'charge.refunded')).status,200);
+cartSession.refunded_money=money(1550);
+const refund={id:squareId(), order_id:cartSession.order_id, payment_id:cartSession.id, status:'COMPLETED', amount_money:money(1550)};
+assert.equal((await event(refund,true,'refund.updated')).status,200);
+assert.equal((await event(refund,true,'refund.updated')).status,200);
 assert.equal(await balance(),29);
-await event({...refund,amount_refunded:4450},true,'charge.refunded');
+const remainingRefund={...refund, id:squareId(), amount_money:money(cartSession.amount_money.amount-1550)};
+cartSession.refunded_money=money(cartSession.amount_money.amount);
+await event(remainingRefund,true,'refund.updated');
 await event(cartSession);
 assert.equal(await balance(),0);
 assert.equal((await request(rewards+'/art/last-showing',null,member)).status,403);
 console.log('Verified rewards enrolment, recovery, protected artwork, shipping exclusion, duplicate webhook protection and partial/full refunds.');
 
-// A Stripe rejection must preserve safe support diagnostics without exposing
-// its raw error message, credentials or customer details to logs or shoppers.
-const stripeFetch = globalThis.fetch;
+// Card data and processor messages must not escape in a response or diagnostic.
+const processorFetch = globalThis.fetch;
 const originalConsoleError = console.error;
-const stripeErrors = [];
+const processorErrors = [];
 const stockBeforeError = bucket.get('store/v1/catalogue.json').value;
-const privateErrorMessage = 'DO_NOT_LOG_customer@example.com sk_test_fixture-secret';
-globalThis.fetch = async () => Response.json({error:{
-  type:'invalid_request_error',
-  code:'payment_method_types_no_longer_supported',
-  param:'payment_method_types',
-  message:privateErrorMessage,
-}}, {status:400, headers:{'Request-Id':'req_fixtureFailure'}});
-console.error = (...args) => stripeErrors.push(args);
+const privateMessage = 'DO_NOT_LOG_customer@example.com token-do-not-log';
+globalThis.fetch = async () => Response.json({errors:[{
+  category:'INVALID_REQUEST_ERROR', code:'BAD_REQUEST', detail:privateMessage,
+}]}, {status:400});
+console.error = (...args) => processorErrors.push(args);
 try {
-  const failure = await request('/api/checkout/status', {session:cartSession.id});
-  assert.equal(failure.status, 502);
-  assert.deepEqual(await failure.json(), {error:'Stripe could not complete this request. Try again shortly.'});
+  const failure = await request('/api/checkout/status', {session:b.attempt});
+  assert.ok(failure.status >= 400);
+  const response = await failure.text();
+  assert.ok(!response.includes(privateMessage));
   assert.equal(bucket.get('store/v1/catalogue.json').value, stockBeforeError);
-  const logged = JSON.stringify(stripeErrors);
-  for (const value of ['invalid_request_error','payment_method_types_no_longer_supported','payment_method_types','req_fixtureFailure']) {
-    assert.ok(logged.includes(value), 'Stripe diagnostics retain ' + value);
-  }
-  assert.match(logged, /\b400\b/);
-  assert.ok(!logged.includes(privateErrorMessage));
-  assert.ok(!logged.includes(env.STRIPE_SECRET_KEY));
+  const logged = JSON.stringify(processorErrors);
+  assert.ok(!logged.includes(privateMessage));
+  assert.ok(!logged.includes(env.SQUARE_ACCESS_TOKEN));
 } finally {
-  globalThis.fetch = stripeFetch;
+  globalThis.fetch = processorFetch;
   console.error = originalConsoleError;
 }
-console.log('Verified pinned Stripe API payment-method parameters and sanitized Stripe failure diagnostics without stock changes.');
+console.log('Verified Square hosted guest payments, signed notifications and safe processor errors.');

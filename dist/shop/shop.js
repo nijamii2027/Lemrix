@@ -305,8 +305,11 @@ function renderCheckout(item, selected) {
   checkoutButton.hidden = !selected.canBuy;
   checkoutButton.disabled = checkoutBusy;
   checkoutButton.textContent = item.checkoutMode === 'test' ? 'Test checkout' : 'Buy now';
-  byId('checkout-note').hidden = !selected.canBuy;
-  byId('checkout-note').textContent = item.checkoutMode === 'test' ? 'Test mode · No charge' : 'Secure checkout with Stripe';
+  const setupPending = item.checkoutMode === 'off' && item.collection !== 'pre-orders';
+  const note = byId('checkout-note');
+  note.hidden = !selected.canBuy && !setupPending;
+  note.textContent = setupPending ? 'Online checkout is being set up.'
+    : item.checkoutMode === 'test' ? 'Square test checkout · No charge' : 'Square checkout · Ships within Australia';
 }
 async function checkoutPost(path, body) {
   const response = await fetch('/api/checkout' + path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -369,7 +372,7 @@ async function checkoutReturn() {
   for (const key of ['checkout','attempt','released']) url.searchParams.delete(key);
   history.replaceState(history.state, '', url);
 }
-if (products.some(p => p.checkoutMode === 'live')) {
+if (products.some(p => p.checkoutMode === 'live' || p.checkoutMode === 'off')) {
   byId('shop-mode').textContent = 'Lemrix shop · AUD';
   byId('search-prices').textContent = 'Prices in Australian dollars';
 }
@@ -382,12 +385,15 @@ function renderDetail(item) {
   byId('back-link').title = 'Back to collection';
   byId('detail-return').setAttribute('href', back);
   byId('detail-name').textContent = item.name;
-  byId('detail-family').textContent = item.category + (item.checkoutMode === 'live' && item.quantity != null ? ' / AUD' : ' / Sample AUD price');
+  byId('detail-family').textContent = item.category + (item.checkoutMode !== 'test' && item.quantity != null ? ' / AUD' : ' / Sample AUD price');
   byId('detail-format').textContent = itemFormat(item);
   byId('availability').textContent = item.collection === 'pre-orders'
     ? 'This is a pre-order concept with an illustrative price. Release dates and reservations will be announced when confirmed.'
     : 'This is a demo catalogue with sample AUD prices. Stock and ordering will appear when the shop opens.';
   if (item.collection !== 'pre-orders' && item.checkoutMode === 'live' && item.quantity != null) byId('availability').textContent = item.canBuy ? 'Available to order. Prices are in Australian dollars.' : 'Currently unavailable.';
+  if (item.collection !== 'pre-orders' && item.checkoutMode === 'off' && item.quantity != null) {
+    byId('availability').textContent = item.quantity > 0 ? 'In stock.' : 'Currently unavailable.';
+  }
   const defaultAvailability=byId('availability').textContent;
   if(item.availability) byId('availability').textContent=item.availability;
   if (item.reserved) byId('availability').textContent = 'Reserved in another checkout. Refresh later to check availability.';

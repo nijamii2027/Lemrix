@@ -8,7 +8,7 @@ import { readRuntimeConfig } from '../lib/runtime-config.mjs';
 const PUBLIC_ORIGINS = new Set(['https://lemrix.vercel.app', 'https://lemrix-surf.vercel.app', 'https://lemrix.com.au', 'https://www.lemrix.com.au']);
 const COOKIE_NAMES = new Set(['__Host-lemrix-admin', '__Host-lemrix-customer', '__Host-lemrix-google', '__Host-lemrix-pass']);
 const READ_ONLY = new Set(['account', 'customer/session', 'rewards', 'rewards/code', 'rewards/art/hill-club', 'rewards/art/last-showing', 'rewards/art/after-hours']);
-const WRITE_ONLY = new Set(['login', 'logout', 'logout-all', 'items/push', 'images', 'customer/challenge', 'customer/google', 'customer/logout', 'rewards/join', 'rewards/recover', 'checkout', 'checkout/status', 'checkout/cancel', 'stripe/webhook']);
+const WRITE_ONLY = new Set(['login', 'logout', 'logout-all', 'items/push', 'images', 'customer/challenge', 'customer/google', 'customer/logout', 'rewards/join', 'rewards/recover', 'checkout', 'checkout/status', 'checkout/cancel', 'square/webhook']);
 const MAX_BODY = 4_400_000;
 
 function fail(status, message) { const error = new Error(message); error.status = status; throw error; }
@@ -72,7 +72,7 @@ export function createGateway({env = process.env, app = application, bucket, con
       const origin = publicOrigin(request, env);
       const selected = route(new URL(request.url, origin).searchParams);
       if (!selected.methods.includes(request.method)) fail(405, 'Method unavailable.');
-      const webhook = selected.pathname === '/api/stripe/webhook';
+      const webhook = selected.pathname === '/api/square/webhook';
       if (request.method === 'POST' && !webhook && request.headers.origin !== origin) fail(403, 'Invalid request origin.');
       if (!storage) {
         if (!env.BLOB_READ_WRITE_TOKEN && !env.BLOB_STORE_ID) fail(503, 'Shop storage is temporarily unavailable.');
@@ -85,7 +85,7 @@ export function createGateway({env = process.env, app = application, bucket, con
       if (cookies) headers.set('Cookie', cookies);
       if (request.headers.origin) headers.set('Origin', request.headers.origin);
       if (request.headers['content-type']) headers.set('Content-Type', request.headers['content-type']);
-      if (webhook && request.headers['stripe-signature']) headers.set('Stripe-Signature', request.headers['stripe-signature']);
+      if (webhook && request.headers['x-square-hmacsha256-signature']) headers.set('x-square-hmacsha256-signature', request.headers['x-square-hmacsha256-signature']);
       const body = request.method === 'POST' ? await bodyBytes(request) : undefined;
       const nativeRequest = new Request(origin + selected.pathname, {method:request.method === 'HEAD' ? 'GET' : request.method, headers, body});
       const result = await app.fetch(nativeRequest, {...env, ...config, BUCKET:storage, CLIENT_IP:clientIp(request), REQUIRE_STORED_CATALOGUE:true});

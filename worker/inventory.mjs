@@ -156,7 +156,7 @@ export async function handleInventory(request, env, initial) {
         '/api/customer/session':['GET'], '/api/customer/challenge':['POST'], '/api/customer/google':['POST'], '/api/customer/logout':['POST'],
         '/api/rewards':['GET'], '/api/rewards/code':['GET'], '/api/rewards/join':['POST'], '/api/rewards/recover':['POST'],
         '/api/rewards/art/hill-club':['GET'], '/api/rewards/art/last-showing':['GET'], '/api/rewards/art/after-hours':['GET'],
-        '/api/checkout':['POST'], '/api/checkout/status':['POST'], '/api/checkout/cancel':['POST'], '/api/stripe/webhook':['POST'],
+        '/api/checkout':['POST'], '/api/checkout/status':['POST'], '/api/checkout/cancel':['POST'], '/api/square/webhook':['POST'],
       }[path];
       if (!methods) reject(404, 'Unknown route.');
       if (!methods.includes(request.method)) reject(405, 'Method unavailable.');
@@ -164,19 +164,19 @@ export async function handleInventory(request, env, initial) {
     if (!env.BUCKET) reject(503,'Inventory storage is unavailable.');
     if (path==='/api/rewards'||path.startsWith('/api/rewards/')) return await rewardsRoute(request,env,url);
     if (path.startsWith('/api/customer/')) return await customerRoute(request,env,url);
-    if (['/api/checkout','/api/checkout/status','/api/checkout/cancel','/api/stripe/webhook'].includes(path)) {
+    if (['/api/checkout','/api/checkout/status','/api/checkout/cancel','/api/square/webhook'].includes(path)) {
       return await checkoutRoute(request, env, initial, url);
     }
     if (path==='/shop/catalogue.js' && request.method==='GET') {
       let {items}=await getCatalogue(env,initial);
       const mode = checkoutMode(env);
       if (mode === 'live') {
-        const due = items.find(item => item.checkoutHolds?.some(h => h.expires <= Date.now()/1000));
+        const due = items.find(item => item.checkoutHolds?.some(h => h.provider === 'square' && h.expires <= Date.now()/1000));
         if (due) {
           try {
             await refreshReservations(env, initial, due);
             ({items} = await getCatalogue(env, initial));
-          } catch { /* Display conservative availability until Stripe can be reached. */ }
+          } catch { /* Display conservative availability until Square can be reached. */ }
         }
       }
       return new Response('const products = '+JSON.stringify(items.map(item => forShop(item, mode)))+';', {headers:{...errors,'Content-Type':'application/javascript; charset=utf-8'}});

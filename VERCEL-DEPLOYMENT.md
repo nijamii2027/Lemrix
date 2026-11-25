@@ -33,10 +33,20 @@ Configure runtime variables on the intended Vercel project and environment. Keep
 | `BLOB_READ_WRITE_TOKEN` | Server access to the connected private Vercel Blob store. |
 | `LEMRIX_CONFIG_KEY` | 32-byte hexadecimal encryption key for the private runtime configuration object. Keep it stable across redeployments. |
 | `SESSION_SECRET` | Signing secret for staff sessions. |
+| `SQUARE_ACCESS_TOKEN` | Sensitive production access token for the Lemrix Square application. |
+| `SQUARE_LOCATION_ID` | The Australian Lemrix seller location that accepts AUD card payments. |
+| `SQUARE_WEBHOOK_SIGNATURE_KEY` | Sensitive signature key for the application's matching webhook subscription. |
+| `SQUARE_SHIPPING_CENTS` | Domestic shipping fee, in whole Australian cents. Use `0` only for free shipping. |
+| `SQUARE_ENVIRONMENT` | `production` by default. Use `sandbox` with Sandbox credentials in a test environment. |
 
-The required private object `store/v2/runtime/config.json` contains an AES-256-GCM encrypted configuration: `ADMIN_PASSWORD_HASH`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SHIPPING_RATE`, and optional `GOOGLE_CLIENT_ID`. The staff password uses PBKDF2-SHA256 with 600,000 iterations and a random salt; the plaintext password is never stored. The runtime reads this object through the private Blob adapter and decrypts it only on the server. A missing object or invalid encryption key fails closed.
+The private object `store/v2/runtime/config.json` contains the encrypted `ADMIN_PASSWORD_HASH` and optional `GOOGLE_CLIENT_ID`. Their server environment values can override the stored settings. The staff password uses PBKDF2-SHA256 with 600,000 iterations and a random salt. If Google customer sign-in is enabled, its permitted JavaScript origins must include the storefront domain.
 
-Those five configuration names can also be provided as server environment overrides when deliberately rotating a credential. The Stripe webhook URL is `https://lemrix.vercel.app/api/stripe/webhook`; retain the signing secret associated with that endpoint. If Google customer sign-in is enabled, its permitted JavaScript origins must include the storefront domain.
+### Connect the Square application
+
+1. Open the Lemrix application in the [Square Developer Console](https://developer.squareup.com/apps) and select Production. Verify that the intended seller location is active, uses AUD and is approved for card payments.
+2. In Webhooks, create a subscription with the exact notification URL `https://www.lemrix.com.au/api/square/webhook`. Use the canonical storefront host to avoid redirects. Select `payment.created`, `payment.updated`, `refund.created` and `refund.updated`. Copy the subscription's signature key directly into the sensitive Vercel environment variable.
+3. Set the Square variables in the main shop project and redeploy. Keep Sandbox tokens, locations and subscriptions in the Sandbox environment with separate inventory storage.
+4. In Square Dashboard's fulfilment settings, verify that the shipment profile is limited to Australia. Test that the hosted checkout accepts an Australian address, excludes other destinations and quotes the intended domestic fee before opening sales. Confirm that card checkout opens signed out, and that Apple Pay is offered on an eligible device. In Sandbox, complete a purchase and verify that the order, inventory reservation and rewards reconcile only once after webhook retries.
 
 The private store holds the catalogue (including stock reservations), uploaded images, staff and customer sessions, rewards records and private reward artwork. Preserve these records when redeploying. Each object uses a versioned envelope with its original bytes and metadata; conditional writes prevent simultaneous stock edits from overwriting one another. Do not seed over an existing catalogue or use the production store for development tests.
 
@@ -50,4 +60,4 @@ Customer sessions and browser storage belong to each domain. Existing carts and 
 
 Open the landing page, play the embedded video, scroll to After Hours and open Shop. Confirm the address remains on the Vercel domain and the catalogue and uploaded product images load. Check `/shop`, `/shop/`, a product bookmark, the cart and the `/admin/` shortcut. Staff sign-in should open the editor without leaving the storefront.
 
-Verify the dynamic catalogue uses current private-store data and that unauthenticated editing requests are rejected. Check checkout success and cancellation return URLs with isolated test fixtures, and verify the Stripe webhook against its endpoint secret. The server configuration controls whether checkout is available; deploying the site does not activate payments or create orders.
+Verify the dynamic catalogue uses current private-store data and that unauthenticated editing requests are rejected. Check checkout success and cancellation return URLs with isolated test fixtures, and verify the Square webhook against its subscription signature key. The server configuration controls whether checkout is available; deploying the site does not activate payments or create orders.

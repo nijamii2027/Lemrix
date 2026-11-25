@@ -99,7 +99,7 @@ window.LemrixCart = (() => {
     byId('cart-total').textContent=money(subtotal);
     byId('cart-checkout').disabled=busy || !ready;
     byId('cart-checkout').textContent=busy?'Opening checkout…':products.some(i=>i.checkoutMode==='test')?'Test checkout':'Checkout';
-    byId('cart-note').textContent=hasPreview?'Checkout is available for in-stock items only.':'Shipping is calculated at checkout.';
+    byId('cart-note').textContent=products.some(item => item.checkoutMode === 'off') ? 'Online checkout is being set up.' : hasPreview?'Checkout is available for in-stock items only.':'Ships within Australia. Shipping is shown at Square checkout.';
   }
   function open() {
     byId('cart').hidden=false; render();

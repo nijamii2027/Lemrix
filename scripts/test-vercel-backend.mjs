@@ -125,28 +125,39 @@ assert.deepEqual(Array.from(runInNewContext((await (await call('/shop/catalogue.
 // Guests and staff can use checkout, and return URLs use the exact
 // current origin. This mock cannot create external orders or take payments.
 const finalCookie = cookieFrom(await call('/api/login', credentials));
-env.STRIPE_SECRET_KEY = 'sk_test_fixture';
+Object.assign(env, {SQUARE_ACCESS_TOKEN:'fixture', SQUARE_ENVIRONMENT:'sandbox',
+  SQUARE_LOCATION_ID:'LTESTAU', SQUARE_SHIPPING_CENTS:'0', SQUARE_WEBHOOK_SIGNATURE_KEY:'fixture-signature'});
 await env.BUCKET.put('store/v1/catalogue.json', JSON.stringify([
   {id:'fixture-pack', name:'Fixture pack', category:'Packs', cents:850, quantity:2, revision:1},
 ]));
 const originalFetch = globalThis.fetch;
-let stripeCalls = 0;
-globalThis.fetch = async (url, options) => {
-  assert.equal(url, 'https://api.stripe.com/v1/checkout/sessions');
-  stripeCalls++;
-  assert.match(options.body.get('success_url'), /^https:\/\/lemrix\.vercel\.app\/shop\/\?checkout=/);
-  assert.match(options.body.get('cancel_url'), /^https:\/\/lemrix\.vercel\.app\/shop\/\?checkout=cancelled/);
-  assert.equal(options.body.get('payment_method_types[0]'), 'card');
-  assert.equal(options.headers['Stripe-Version'], '2024-06-20');
-  return Response.json({id:'cs_test_fixture123456789', status:'open', livemode:false,
-    url:'https://checkout.stripe.com/c/pay/cs_test_fixture123456789'});
+const createdOrders = new Map();
+globalThis.fetch = async (url, options={}) => {
+  const path = new URL(url);
+  assert.equal(path.origin, 'https://connect.squareupsandbox.com');
+  if (path.pathname === '/v2/online-checkout/payment-links' && options.method === 'POST') {
+    const {order, checkout_options:checkout} = JSON.parse(options.body);
+    const redirect = new URL(checkout.redirect_url);
+    assert.equal(redirect.origin,storefront);
+    assert.equal(redirect.pathname,'/shop/');
+    assert.equal(redirect.searchParams.get('checkout'),order.reference_id);
+    assert.equal(checkout.accepted_payment_methods.apple_pay,true);
+    const id=randomUUID().replaceAll('-','');
+    const squareOrder={...order,id,state:'OPEN',total_money:{amount:850,currency:'AUD'},tenders:[]};
+    createdOrders.set(id,squareOrder);
+    return Response.json({payment_link:{id:'L'+id,order_id:id,url:'https://sandbox.square.link/u/'+id},related_resources:{orders:[squareOrder]}});
+  }
+  const id=path.pathname.split('/').pop();
+  assert.equal(path.pathname, '/v2/orders/'+id);
+  assert.ok(createdOrders.has(id));
+  return Response.json({order:createdOrders.get(id)});
 };
 try {
-  const order = {itemId:'fixture-pack', copy:null, expectedCents:850, attempt:randomUUID(), started:Math.floor(Date.now() / 1000)};
-  assert.equal((await call('/api/checkout', order)).status, 200);
-  assert.equal((await call('/api/checkout', order, {Cookie:finalCookie})).status, 200);
-  assert.equal((await call('/api/checkout', order, {Cookie:finalCookie, Origin:'https://lemrix-surf.vercel.app'})).status, 403);
-  assert.equal(stripeCalls, 2);
+  const order = () => ({itemId:'fixture-pack', copy:null, expectedCents:850, attempt:randomUUID(), started:Math.floor(Date.now() / 1000)});
+  assert.equal((await call('/api/checkout', order())).status, 200);
+  assert.equal((await call('/api/checkout', order(), {Cookie:finalCookie})).status, 200);
+  assert.equal((await call('/api/checkout', order(), {Cookie:finalCookie, Origin:'https://lemrix-surf.vercel.app'})).status, 403);
+  assert.equal(createdOrders.size, 2);
   assert.equal((await records.get('store/v1/catalogue.json').json())[0].quantity, 2);
 } finally { globalThis.fetch = originalFetch; }
 
@@ -187,4 +198,4 @@ contended.env.BUCKET.put = async (key, ...rest) => key.startsWith(ratePrefix) ? 
 assert.equal((await contended.call('/api/login', credentials)).status, 503, 'Unavailable atomic rate storage fails closed');
 assert.equal(contended.records.size, 0);
 
-console.log('Verified native password-only admin login, signed secure sessions, forged-identity rejection, expiry/rotation/logout-all, exact-origin CSRF, persistent concurrent rate limits, stored-only production catalogue and same-origin Stripe returns.');
+console.log('Verified native password-only admin login, signed secure sessions, forged-identity rejection, expiry/rotation/logout-all, exact-origin CSRF, persistent concurrent rate limits, stored-only production catalogue and same-origin Square returns.');

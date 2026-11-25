@@ -189,7 +189,7 @@ try {
       Origin:ORIGIN, 'Content-Type':'application/json', Authorization:'Bearer caller-token',
       'OAI-Sites-Authorization':'Bearer spoofed-token', 'oai-authenticated-user-email':'spoofed@example.com',
       'oai-authenticated-user-id':'spoofed-id', 'X-Forwarded-Host':'evil.example', 'X-Lemrix-Owner':'spoofed-owner',
-      'Stripe-Signature':'not-a-webhook', 'X-Extra':'not-allowed',
+      'x-square-hmacsha256-signature':'not-a-webhook', 'X-Extra':'not-allowed',
       Cookie:'session=foreign; __Host-lemrix-admin=admin; __Host-lemrix-customer=customer; __Host-lemrix-google=google; __Host-lemrix-owner=old-owner; __Host-lemrix-connect=old-bridge; __Host-lemrix-pass=pass',
     }});
     assert.equal(result.status, 200);
@@ -254,17 +254,17 @@ try {
     assert.equal((await call('/api/gateway?resource=catalogue', {method:'HEAD'})).body.length, 0);
   });
 
-  await test('Preserves raw webhook bytes and Stripe signature without browser Origin', async () => {
+  await test('Preserves raw webhook bytes and Square signature without browser Origin', async () => {
     const data = Buffer.from('{\n  "type": "fixture", "text": "café", "data": [1, 2]\n}\n', 'utf8');
-    const signature = 't=1800000000,v1=fixture-signature';
-    const result = await call(api('stripe/webhook'), {method:'POST', headers:{'Content-Type':'application/json', 'Stripe-Signature':signature}, chunks:[data.subarray(0, 17), data.subarray(17)]});
+    const signature = 'Zml4dHVyZS1zaWduYXR1cmU=';
+    const result = await call(api('square/webhook'), {method:'POST', headers:{'Content-Type':'application/json', 'x-square-hmacsha256-signature':signature}, chunks:[data.subarray(0, 17), data.subarray(17)]});
     assert.equal(result.status, 200);
-    assert.equal(calls[0].request.url, ORIGIN + '/api/stripe/webhook');
+    assert.equal(calls[0].request.url, ORIGIN + '/api/square/webhook');
     assert.deepEqual(calls[0].bytes, data);
-    assert.equal(calls[0].request.headers.get('Stripe-Signature'), signature);
+    assert.equal(calls[0].request.headers.get('x-square-hmacsha256-signature'), signature);
     assert.equal(calls[0].request.headers.get('Origin'), null);
-    await call(api('customer/logout'), {...post({}), headers:{...post({}).headers, 'Stripe-Signature':signature}});
-    assert.equal(calls[1].request.headers.get('Stripe-Signature'), null);
+    await call(api('customer/logout'), {...post({}), headers:{...post({}).headers, 'x-square-hmacsha256-signature':signature}});
+    assert.equal(calls[1].request.headers.get('x-square-hmacsha256-signature'), null);
   });
 
   await test('Enforces declared and streamed upload limits before application work', async () => {

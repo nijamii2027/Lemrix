@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
-import { createCipheriv, webcrypto } from 'node:crypto';
+import { createCipheriv, randomBytes, webcrypto } from 'node:crypto';
 import { decryptRuntimeConfig, encryptRuntimeConfig, hashAdminPassword, readRuntimeConfig, runtimeConfigPath, RuntimeConfigError } from '../lib/runtime-config.mjs';
 
 const password = 'fixture-owner-passphrase';
@@ -15,7 +15,7 @@ const verificationKey = await webcrypto.subtle.importKey('raw', new TextEncoder(
 const verification = await webcrypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', iterations: 600000, salt: Buffer.from(saltHex, 'hex') }, verificationKey, 256);
 assert.equal(Buffer.from(verification).toString('hex'), hashHex);
 
-const values = { ADMIN_PASSWORD_HASH: hash, STRIPE_SECRET_KEY: 'sk_test_fixture', STRIPE_SHIPPING_RATE: 'shr_fixture', STRIPE_WEBHOOK_SECRET: 'whsec_fixture' };
+const values = { ADMIN_PASSWORD_HASH: hash, GOOGLE_CLIENT_ID: 'fixture-client' };
 const encrypted = encryptRuntimeConfig(values, key);
 assert.deepEqual(decryptRuntimeConfig(encrypted, key), values);
 assert.notDeepEqual(encryptRuntimeConfig(values, key).iv, encrypted.iv);
@@ -60,7 +60,20 @@ function bucketFixture() {
 
 const { bucket } = bucketFixture();
 await bucket.put(runtimeConfigPath, JSON.stringify(encrypted));
-assert.deepEqual(await readRuntimeConfig(bucket, { LEMRIX_CONFIG_KEY: key, STRIPE_SECRET_KEY: 'override', ADMIN_PASSWORD: 'ignored', SESSION_SECRET: 'ignored' }), { ...values, STRIPE_SECRET_KEY: 'override' });
+assert.deepEqual(await readRuntimeConfig(bucket, { LEMRIX_CONFIG_KEY: key, GOOGLE_CLIENT_ID: 'override', ADMIN_PASSWORD: 'ignored', SESSION_SECRET: 'ignored' }), { ...values, GOOGLE_CLIENT_ID: 'override' });
+// Earlier deployments also encrypted the retired processor credentials in this object.
+const previousIv = randomBytes(12);
+const previousCipher = createCipheriv('aes-256-gcm', Buffer.from(key, 'hex'), previousIv);
+previousCipher.setAAD(Buffer.from(runtimeConfigPath));
+const previous = {...values, STRIPE_SECRET_KEY:'retired-test-value', STRIPE_WEBHOOK_SECRET:'retired-hook', STRIPE_SHIPPING_RATE:'retired-rate'};
+const previousBytes = Buffer.concat([previousCipher.update(JSON.stringify(previous)), previousCipher.final()]);
+await bucket.put(runtimeConfigPath, JSON.stringify({...encrypted, iv:previousIv.toString('base64'), tag:previousCipher.getAuthTag().toString('base64'), ciphertext:previousBytes.toString('base64')}));
+const beforeMigration = (await bucket.head(runtimeConfigPath)).etag;
+assert.deepEqual(await readRuntimeConfig(bucket, {LEMRIX_CONFIG_KEY:key}), values);
+const afterMigration = (await bucket.head(runtimeConfigPath)).etag;
+assert.notEqual(afterMigration, beforeMigration);
+assert.deepEqual(await readRuntimeConfig(bucket, {LEMRIX_CONFIG_KEY:key}), values);
+assert.equal((await bucket.head(runtimeConfigPath)).etag, afterMigration);
 await bucket.put(runtimeConfigPath, JSON.stringify(encryptRuntimeConfig({ ...values, GOOGLE_CLIENT_ID: 'fresh-client' }, key)));
 assert.equal((await readRuntimeConfig(bucket, { LEMRIX_CONFIG_KEY: key })).GOOGLE_CLIENT_ID, 'fresh-client');
 await assert.rejects(() => readRuntimeConfig(bucketFixture().bucket, { LEMRIX_CONFIG_KEY: key, ...values }), RuntimeConfigError);

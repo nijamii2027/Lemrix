@@ -1,10 +1,16 @@
-const stripeSessionId = /^cs_(?:test_|live_)?[A-Za-z0-9]{12,240}$/;
 const checkoutStore = 'lemrix-illustrated';
+const attemptId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const squareId = /^[a-zA-Z0-9_-]{1,192}$/;
+const squareLinks = 'online-checkout/payment-links';
+
 function checkoutMode(env) {
-  if (/^(sk|rk)_test_/.test(env.STRIPE_SECRET_KEY || '')) return 'test';
-  if (/^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY || '') && env.STRIPE_WEBHOOK_SECRET && env.STRIPE_SHIPPING_RATE) return 'live';
-  return 'off';
+  if (!env.SQUARE_ACCESS_TOKEN || !env.SQUARE_LOCATION_ID || !env.SQUARE_WEBHOOK_SIGNATURE_KEY ||
+      !/^\d{1,9}$/.test(env.SQUARE_SHIPPING_CENTS ?? '')) return 'off';
+  const environment = env.SQUARE_ENVIRONMENT ?? 'production';
+  if (environment === 'sandbox') return 'test';
+  return environment === 'production' ? 'live' : 'off';
 }
+
 function forShop(item, mode) {
   const {checkoutHolds = [], ...publicItem} = item;
   const available = Math.max(0, (item.quantity ?? 0) - checkoutHolds.length);
@@ -21,33 +27,10 @@ function forShop(item, mode) {
   if (Number.isInteger(item.quantity) && !demo) publicItem.quantity = available;
   return publicItem;
 }
-async function stripeRequest(env, path, form, requestId) {
-  const headers = {Authorization:'Bearer ' + env.STRIPE_SECRET_KEY, 'Stripe-Version':'2024-06-20'};
-  if (requestId) headers['Idempotency-Key'] = requestId;
-  const response = await fetch('https://api.stripe.com/v1/' + path, {
-    method: form ? 'POST' : 'GET', headers, body: form
-  });
-  if (!response.ok) {
-    const result = await response.json().catch(() => null);
-    const error = result?.error;
-    const safe = (value, pattern) => typeof value === 'string' && pattern.test(value) ? value : null;
-    // Keep diagnostics useful without logging credentials, customer data or raw messages.
-    console.error('Stripe API request failed', {
-      status: response.status,
-      field: ['version', 'expires_at', 'shipping_rate', 'payment method', 'activate', 'capabilit', 'currency', 'business', 'account', 'live mode'].find(term => error?.message?.toLowerCase().includes(term)),
-      type: safe(error?.type, /^[a-z_]{1,80}$/),
-      code: safe(error?.code, /^[a-z0-9_]{1,80}$/),
-      param: safe(error?.param, /^[a-zA-Z0-9_.\[\]]{1,160}$/),
-      requestId: safe(response.headers.get('Request-Id'), /^req_[a-zA-Z0-9]{1,100}$/)
-    });
-    reject(502, 'Stripe could not complete this request. Try again shortly.');
-  }
-  return response.json();
-}
 async function updateStock(env, initial, change) {
   for (let attempt = 0; attempt < 6; attempt++) {
     const {items, etag} = await getCatalogue(env, initial);
-    if (!change(items)) return;
+    if (!await change(items)) return;
     const onlyIf = new Headers(etag ? {'If-Match':'"' + etag + '"'} : {'If-None-Match':'*'});
     if (await env.BUCKET.put(catalogueKey, JSON.stringify(items), {onlyIf, httpMetadata:{contentType:'application/json'}})) return;
   }
@@ -63,40 +46,6 @@ function selectedListing(items, body, mode) {
   const cents = selected ? selected.cents : item.cents;
   if (cents !== body.expectedCents) reject(409, 'The price changed. Refresh to see the new price.');
   return {item, cents, title: selected ? item.name + ' · Copy ' + String.fromCharCode(65 + body.copy) + ' · ' + selected.condition : item.name};
-}
-function matchesStore(session) {
-  return stripeSessionId.test(session.id) && session.metadata?.store === checkoutStore;
-}
-async function settleCheckout(env, initial, session) {
-  if (!matchesStore(session)) return 'unknown';
-  const paid = session.status === 'complete' && session.payment_status === 'paid';
-  if (!paid && session.status !== 'expired') return 'pending';
-  if (!session.livemode) return paid ? 'test-paid' : 'expired';
-  await updateStock(env, initial, items => {
-    const order = items.map(item => ({item, units:(item.checkoutHolds || []).filter(h => h.session === session.id)}))
-      .filter(line => line.units.length);
-    if (!order.length) return false;
-    const subtotal = order.reduce((sum, line) => sum + line.units.reduce((total,h) => total + h.cents,0),0);
-    if (paid && (session.currency !== 'aud' || session.amount_subtotal !== subtotal)) reject(409, 'Order total needs review.');
-    for (const {item,units} of order) {
-      if (paid) {
-        item.quantity = Math.max(0, item.quantity - units.length);
-        for (const unit of units) if (unit.copy !== null) item.copies[unit.copy].sold = true;
-      }
-      item.checkoutHolds = item.checkoutHolds.filter(h => h.session !== session.id);
-      item.revision++;
-    }
-    return true;
-  });
-  if(paid && session.currency==='aud')await recordReward(env,session.metadata,'subtotal',session.amount_subtotal);
-  return paid ? 'paid' : 'expired';
-}
-async function refreshReservations(env, initial, item) {
-  const due = (item?.checkoutHolds || []).filter(h => h.expires <= Date.now() / 1000);
-  for (const id of [...new Set(due.map(h => h.session))].slice(0,8)) {
-    const session = await stripeRequest(env, 'checkout/sessions/' + id);
-    await settleCheckout(env, initial, session);
-  }
 }
 function checkoutLines(body) {
   const input = body.lines === undefined ? [{...body,quantity:1}] : body.lines;
@@ -125,125 +74,270 @@ function priceOrder(items,lines,mode) {
     return {...line,...listing};
   });
 }
-async function startCheckout(env, initial, body, origin, request) {
-  const mode = checkoutMode(env);
-  if (mode === 'off') reject(503, 'Checkout is not connected yet.');
-  if (!/^[0-9a-f-]{36}$/.test(body.attempt || '')) reject(400, 'Invalid checkout attempt.');
-  const lines = checkoutLines(body);
-  let {items} = await getCatalogue(env, initial);
-  const pending = items.filter(p => lines.some(l => l.itemId === p.id) && p.checkoutHolds?.some(h => h.expires <= Date.now()/1000));
-  if (mode === 'live' && pending.length) {
-    for (const p of pending) await refreshReservations(env, initial, p);
-    ({items} = await getCatalogue(env, initial));
-  }
-  const held = items.flatMap(p => (p.checkoutHolds || []).filter(h => h.attempt === body.attempt).map(h => ({...h,itemId:p.id})));
-  if (held.length && mode === 'live') {
-    if (held.length !== lines.reduce((n,l)=>n+l.quantity,0) || lines.some(l =>
-      held.filter(h=>h.itemId===l.itemId && h.copy===l.copy && h.cents===l.expectedCents).length !== l.quantity))
-      reject(409,'The cart changed. Start a new checkout.');
-    const existing = await stripeRequest(env, 'checkout/sessions/' + held[0].session);
-    if (existing.status === 'open' && existing.url) return json({url:existing.url});
-    await settleCheckout(env, initial, existing);
-    reject(409, 'That checkout has ended. Refresh the shop.');
-  }
-  const order = priceOrder(items,lines,mode);
-  const returnHash = body.lines ? '#cart' : '#item/' + encodeURIComponent(order[0].item.id);
-  const details = new URLSearchParams({
-    mode:'payment', 'payment_method_types[0]':'card',
-    'shipping_address_collection[allowed_countries][0]':'AU', 'metadata[store]':checkoutStore,
-    'metadata[item_id]':order[0].item.id, 'metadata[attempt]':body.attempt,
-    'success_url':origin + '/shop/?checkout={CHECKOUT_SESSION_ID}&attempt=' + body.attempt + returnHash,
-    'cancel_url':origin + '/shop/?checkout=cancelled&attempt=' + body.attempt + returnHash
+
+async function squareRequest(env, path, method = 'GET', body, allowMissing = false) {
+  const host = checkoutMode(env) === 'test' ? 'connect.squareupsandbox.com' : 'connect.squareup.com';
+  const response = await fetch('https://' + host + '/v2/' + path, {
+    method, redirect:'error',
+    headers:{Authorization:'Bearer ' + env.SQUARE_ACCESS_TOKEN, 'Content-Type':'application/json', 'Square-Version':'2026-11-18'},
+    body:body === undefined ? undefined : JSON.stringify(body)
   });
-  if(mode==='live'){
-    const wallet=await currentPass(request,env);
-    if(wallet){
-      details.set('metadata[reward_pass]',wallet.id);
-      for(const [k,v] of Object.entries({store:checkoutStore,reward_pass:wallet.id,attempt:body.attempt}))
-        details.set('payment_intent_data[metadata]['+k+']',v);
+  if (allowMissing && response.status === 404) return null;
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data) {
+    const code = data?.errors?.[0]?.code;
+    console.error('Square request failed', response.status, /^[A-Z0-9_]{1,80}$/.test(code || '') ? code : 'UNKNOWN');
+    reject(502, 'Square checkout is temporarily unavailable. Please try again.');
+  }
+  return data;
+}
+
+function checkoutPath(env, attempt, part) {
+  return 'store/v2/square/' + checkoutMode(env) + '/' + attempt + '/' + part + '.json';
+}
+async function getCheckoutPart(env, attempt, part) {
+  const obj = await env.BUCKET.get(checkoutPath(env, attempt, part));
+  return obj ? obj.json() : null;
+}
+async function saveCheckoutPart(env, attempt, part, value) {
+  const stored = await env.BUCKET.put(checkoutPath(env, attempt, part), JSON.stringify(value), {
+    onlyIf:new Headers({'If-None-Match':'*'}), httpMetadata:{contentType:'application/json'}
+  });
+  if (stored) return value;
+  const previous = await getCheckoutPart(env, attempt, part);
+  if (!previous) reject(503, 'Please retry this checkout.');
+  return previous;
+}
+
+function squareLink(env, link) {
+  if (!squareId.test(link?.id || '') || !squareId.test(link?.order_id || '')) reject(502, 'Square returned an invalid checkout.');
+  const url = URL.canParse(link.url) && new URL(link.url);
+  const allowed = checkoutMode(env) === 'test' ? ['https://sandbox.square.link'] : ['https://square.link', 'https://checkout.square.site'];
+  if (!url || url.username || url.password || !allowed.includes(url.origin)) reject(502, 'Square returned an invalid checkout address.');
+  return {id:link.id, orderId:link.order_id, url:url.href};
+}
+
+async function prepareQuote(env, initial, request, body, origin) {
+  const lines = checkoutLines(body);
+  const {attempt, started} = body;
+  let quote = await getCheckoutPart(env, attempt, 'quote');
+  if (!quote) {
+    let {items} = await getCatalogue(env, initial);
+    const due = items.filter(item => lines.some(line => line.itemId === item.id) && item.checkoutHolds?.some(hold => hold.provider === 'square' && hold.expires <= Date.now()/1000));
+    if (checkoutMode(env) === 'live' && due.length) {
+      for (const item of due) await refreshReservations(env, initial, item);
+      ({items} = await getCatalogue(env, initial));
     }
+    const priced = priceOrder(items, lines, checkoutMode(env));
+    const wallet = checkoutMode(env) === 'live' ? await currentPass(request, env) : null;
+    const hash = body.lines ? '#cart' : '#item/' + encodeURIComponent(lines[0].itemId);
+    quote = await saveCheckoutPart(env, attempt, 'quote', {
+      attempt, lines, location:env.SQUARE_LOCATION_ID, expires:started + 45*60,
+      subtotal:priced.reduce((sum, line) => sum + line.cents * line.quantity, 0),
+      shipping:Number(env.SQUARE_SHIPPING_CENTS), pass:wallet?.id || null,
+      returnUrl:origin + '/shop/?checkout=' + attempt + '&attempt=' + attempt + hash,
+      items:priced.map(line => ({name:line.title, quantity:String(line.quantity), base_price_money:{amount:line.cents, currency:'AUD'}}))
+    });
   }
-  for (const [i,line] of order.entries()) {
-    const prefix = 'line_items[' + i + ']';
-    details.set(prefix+'[quantity]', String(line.quantity));
-    details.set(prefix+'[price_data][currency]', 'aud');
-    details.set(prefix+'[price_data][unit_amount]', String(line.cents));
-    details.set(prefix+'[price_data][product_data][name]', line.title);
-  }
-  if (env.STRIPE_SHIPPING_RATE && env.STRIPE_SHIPPING_RATE !== 'free') details.set('shipping_options[0][shipping_rate]', env.STRIPE_SHIPPING_RATE);
-  // Derive expiry from a client attempt time so retries send identical Stripe parameters.
+  if (JSON.stringify(quote.lines) !== JSON.stringify(lines) || quote.location !== env.SQUARE_LOCATION_ID) reject(409, 'The cart changed. Start a new checkout.');
+  return quote;
+}
+
+async function getOrCreateLink(env, quote) {
+  const existing = await getCheckoutPart(env, quote.attempt, 'link');
+  if (existing) return existing;
+  const options = {
+    redirect_url:quote.returnUrl, ask_for_shipping_address:true, allow_tipping:false, enable_coupon:false, enable_loyalty:false,
+    accepted_payment_methods:{apple_pay:true, google_pay:true}
+  };
+  if (quote.shipping) options.shipping_fee = {name:'Shipping', charge:{amount:quote.shipping, currency:'AUD'}};
+  const result = await squareRequest(env, squareLinks, 'POST', {
+    idempotency_key:quote.attempt,
+    order:{location_id:quote.location, reference_id:quote.attempt, line_items:quote.items},
+    checkout_options:options
+  });
+  return saveCheckoutPart(env, quote.attempt, 'link', squareLink(env, result.payment_link));
+}
+
+async function reserveSquareStock(env, initial, quote, link) {
+  await updateStock(env, initial, async rows => {
+    // Recheck inside the conditional catalogue update. A concurrent cancel or
+    // settlement must not be followed by recreating the same reservation.
+    if (await getCheckoutPart(env, quote.attempt, 'closed')) reject(409, 'That checkout has ended.');
+    if (rows.some(item => item.checkoutHolds?.some(h => h.provider === 'square' && h.session === link.orderId))) return false;
+    for (const line of priceOrder(rows, quote.lines, 'live')) {
+      const holds = line.item.checkoutHolds ||= [];
+      for (let n = 0; n < line.quantity; n++) {
+        holds.push({provider:'square', session:link.orderId, attempt:quote.attempt, copy:line.copy, cents:line.cents, expires:quote.expires});
+      }
+      line.item.revision++;
+    }
+    return true;
+  });
+}
+
+async function startCheckout(env, initial, body, origin, request) {
   if (!Number.isSafeInteger(body.started) || Math.abs(Date.now()/1000 - body.started) > 600) reject(400, 'Start a new checkout.');
-  details.set('expires_at', String(body.started + 45 * 60));
-  // A new request schema must not replay failures cached under the retired schema.
-  const session = await stripeRequest(env, 'checkout/sessions', details, 'lemrix-card-' + body.attempt);
-  if (!stripeSessionId.test(session.id) || session.status !== 'open' || !session.url ||
-      new URL(session.url).origin !== 'https://checkout.stripe.com' || session.livemode !== (mode === 'live'))
-    reject(502, 'Stripe checkout is unavailable.');
-  if (mode === 'live') {
+  const quote = await prepareQuote(env, initial, request, body, origin);
+  if (await getCheckoutPart(env, quote.attempt, 'closed')) reject(409, 'That checkout has ended.');
+  if (quote.expires <= Date.now()/1000) reject(409, 'That checkout has expired. Start a new checkout.');
+  const link = await getOrCreateLink(env, quote);
+  if (checkoutMode(env) === 'live') {
     try {
-      await updateStock(env, initial, rows => {
-        if (rows.some(item => item.checkoutHolds?.some(h => h.session === session.id))) return false;
-        for (const line of priceOrder(rows,lines,mode)) {
-          const holds = line.item.checkoutHolds ||= [];
-          for (let unit=0; unit<line.quantity; unit++) holds.push({session:session.id,attempt:body.attempt,copy:line.copy,cents:line.cents,expires:session.expires_at});
-          line.item.revision++;
-        }
-        return true;
-      });
+      await reserveSquareStock(env, initial, quote, link);
     } catch (error) {
-      if (error.status === 409) await stripeRequest(env,'checkout/sessions/'+session.id+'/expire',new URLSearchParams());
+      // The link is private until stock is reserved. Cancel failed competing
+      // checkouts; never release a hold just because a remote request failed.
+      if (error.status === 409 && !await getCheckoutPart(env, quote.attempt, 'closed')) {
+        await reconcileCheckout(env, initial, quote, link, true);
+      }
       throw error;
     }
   }
-  return json({url:session.url});
+  // A cancellation may have raced the first stock write while no holds were
+  // visible. Finish any recorded terminal action before handing out the URL.
+  const closed = await getCheckoutPart(env, quote.attempt, 'closed');
+  if (closed) {
+    await settleSquareStock(env, initial, quote, link, closed.status);
+    reject(409, 'That checkout has ended.');
+  }
+  return json({url:link.url});
 }
-async function cancelCheckout(env, initial, body) {
-  if (!/^[0-9a-f-]{36}$/.test(body.attempt || '')) reject(400, 'Invalid checkout attempt.');
-  const {items} = await getCatalogue(env, initial);
-  const hold = items.flatMap(row => row.checkoutHolds || []).find(h => h.attempt === body.attempt);
-  if (!hold) return json({status:'closed'});
-  let session = await stripeRequest(env, 'checkout/sessions/' + hold.session);
-  if (session.status === 'open') session = await stripeRequest(env, 'checkout/sessions/' + hold.session + '/expire', new URLSearchParams());
-  return json({status:await settleCheckout(env, initial, session)});
+
+function validateOrder(quote, link, order) {
+  if (order?.id !== link.orderId || order.reference_id !== quote.attempt || order.location_id !== quote.location) {
+    reject(409, 'Square order details need review.');
+  }
 }
-async function stripeEvent(request, env, initial) {
-  if (!env.STRIPE_WEBHOOK_SECRET) reject(503, 'Webhook is not configured.');
+async function orderPayments(env, quote, link, order, eventPaymentId) {
+  const ids = new Set((order.tenders || []).map(tender => tender.payment_id || tender.id));
+  if (eventPaymentId) ids.add(eventPaymentId);
+  const payments = [];
+  for (const id of ids) {
+    if (!squareId.test(id || '')) reject(409, 'Square payment needs review.');
+    const {payment} = await squareRequest(env, 'payments/' + id);
+    if (payment?.id !== id || payment.order_id !== link.orderId || payment.location_id !== quote.location) reject(409, 'Square payment details need review.');
+    payments.push(payment);
+  }
+  return payments;
+}
+async function settleSquareStock(env, initial, quote, link, status) {
+  const outcome = await saveCheckoutPart(env, quote.attempt, 'closed', {status});
+  if (outcome.status !== status) reject(409, 'Square order status needs review.');
+  if (checkoutMode(env) === 'test') return;
+  await updateStock(env, initial, rows => {
+    let count = 0, subtotal = 0;
+    for (const item of rows) {
+      const held = item.checkoutHolds?.filter(h => h.provider === 'square' && h.session === link.orderId);
+      if (!held?.length) continue;
+      count += held.length;
+      for (const h of held) {
+        subtotal += h.cents;
+        if (status === 'paid' && h.copy !== null) item.copies[h.copy].sold = true;
+      }
+      if (status === 'paid') item.quantity -= held.length;
+      item.checkoutHolds = item.checkoutHolds.filter(h => !(h.provider === 'square' && h.session === link.orderId));
+      item.revision++;
+    }
+    if (count && status === 'paid' && (subtotal !== quote.subtotal || count !== quote.lines.reduce((n,l) => n+l.quantity,0))) reject(409, 'Order stock needs review.');
+    return count > 0;
+  });
+}
+
+async function reconcileCheckout(env, initial, quote, link, cancel = false, knownOrder, eventPaymentId) {
+  const readOrder = async () => (await squareRequest(env, 'orders/' + link.orderId)).order;
+  let order = knownOrder || await readOrder();
+  validateOrder(quote, link, order);
+  let payments = await orderPayments(env, quote, link, order, eventPaymentId);
+  // Deleting a single-use Square link cancels its unpaid order. Read it
+  // back even on a missing link, since a completed payment may have won.
+  if (cancel && !payments.some(p => !['CANCELED','FAILED'].includes(p.status)) && ['OPEN','DRAFT'].includes(order.state)) {
+    await squareRequest(env, squareLinks + '/' + link.id, 'DELETE', undefined, true);
+    order = await readOrder();
+    validateOrder(quote, link, order);
+    payments = await orderPayments(env, quote, link, order, eventPaymentId);
+  }
+  const complete = payments.filter(p => p.status === 'COMPLETED');
+  if (complete.length) {
+    let received = 0, refunded = 0;
+    for (const payment of complete) {
+      const money = payment.amount_money;
+      const refund = payment.refunded_money;
+      if (money?.currency !== 'AUD' || !Number.isSafeInteger(money.amount) || money.amount <= 0 ||
+          (refund && (refund.currency !== 'AUD' || !Number.isSafeInteger(refund.amount) || refund.amount < 0 || refund.amount > money.amount))) reject(409, 'Payment total needs review.');
+      received += money.amount;
+      refunded += refund?.amount || 0;
+    }
+    if (received !== quote.subtotal + quote.shipping) reject(409, 'Order total needs review.');
+    const status = checkoutMode(env) === 'test' ? 'test-paid' : 'paid';
+    await settleSquareStock(env, initial, quote, link, status);
+    if (status === 'paid' && quote.pass) {
+      const metadata = {store:checkoutStore, attempt:quote.attempt, reward_pass:quote.pass};
+      await recordReward(env, metadata, 'subtotal', quote.subtotal);
+      if (refunded) await recordReward(env, metadata, 'refund', Math.min(refunded, quote.subtotal));
+    }
+    return status;
+  }
+  if (order.state === 'CANCELED' && payments.every(p => ['CANCELED','FAILED'].includes(p.status))) {
+    await settleSquareStock(env, initial, quote, link, 'expired');
+    return 'expired';
+  }
+  return 'pending';
+}
+
+async function checkoutState(env, initial, attempt, cancel) {
+  const quote = await getCheckoutPart(env, attempt, 'quote');
+  const link = await getCheckoutPart(env, attempt, 'link');
+  if (!quote || !link) {
+    if (cancel) return 'closed';
+    reject(404, 'Order not found.');
+  }
+  return reconcileCheckout(env, initial, quote, link, cancel);
+}
+
+async function refreshReservations(env, initial, item) {
+  const due = (item?.checkoutHolds || []).filter(h => h.provider === 'square' && h.expires <= Date.now()/1000);
+  for (const attempt of [...new Set(due.map(h => h.attempt))].slice(0,8)) await checkoutState(env, initial, attempt, true);
+}
+
+async function squareWebhook(request, env, initial) {
   const raw = await readBody(request, 512000);
-  const signature = request.headers.get('Stripe-Signature') || '';
-  const values = signature.split(',').map(s => s.trim().split('='));
-  const stamp = values.find(([key]) => key === 't')?.[1];
-  if (!/^\d+$/.test(stamp || '') || Math.abs(Date.now()/1000 - Number(stamp)) > 300) reject(400, 'Invalid signature.');
-  const key = await crypto.subtle.importKey('raw', encoder.encode(env.STRIPE_WEBHOOK_SECRET), {name:'HMAC',hash:'SHA-256'}, false, ['verify']);
-  const prefix = encoder.encode(stamp + '.');
-  const signed = new Uint8Array(prefix.length + raw.length);
-  signed.set(prefix); signed.set(raw, prefix.length);
-  let valid = false;
-  for (const [name, value] of values) {
-    if (name !== 'v1' || !/^[0-9a-f]{64}$/.test(value || '')) continue;
-    const bytes = Uint8Array.from(value.match(/../g), byte => parseInt(byte, 16));
-    if (await crypto.subtle.verify('HMAC', key, bytes, signed)) {valid = true; break;}
+  const signature = request.headers.get('x-square-hmacsha256-signature') || '';
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(signature)) reject(400, 'Invalid signature.');
+  const url = encoder.encode(request.url);
+  const signed = new Uint8Array(url.length + raw.length);
+  signed.set(url);
+  signed.set(raw, url.length);
+  const key = await crypto.subtle.importKey('raw', encoder.encode(env.SQUARE_WEBHOOK_SIGNATURE_KEY), {name:'HMAC', hash:'SHA-256'}, false, ['verify']);
+  if (!await crypto.subtle.verify('HMAC', key, Uint8Array.from(atob(signature), c => c.charCodeAt(0)), signed)) reject(400, 'Invalid signature.');
+  let event;
+  try { event = JSON.parse(decoder.decode(raw)); } catch { reject(400, 'Invalid event.'); }
+  const data = event?.data?.object;
+  let payment;
+  if (['payment.created','payment.updated'].includes(event?.type)) payment = data?.payment;
+  if (['refund.created','refund.updated'].includes(event?.type) && squareId.test(data?.refund?.payment_id || '')) {
+    ({payment} = await squareRequest(env, 'payments/' + data.refund.payment_id));
   }
-  if (!valid) reject(400, 'Invalid signature.');
-  const event = JSON.parse(decoder.decode(raw));
-  if(event.type==='charge.refunded'){
-    const charge=event.data.object;
-    if(charge.livemode && charge.currency==='aud')await recordReward(env,charge.metadata,'refund',charge.amount_refunded);
+  if (squareId.test(payment?.order_id || '') && squareId.test(payment?.id || '') && payment.location_id === env.SQUARE_LOCATION_ID) {
+    const {order} = await squareRequest(env, 'orders/' + payment.order_id);
+    if (attemptId.test(order?.reference_id || '')) {
+      const quote = await getCheckoutPart(env, order.reference_id, 'quote');
+      const link = await getCheckoutPart(env, order.reference_id, 'link');
+      if (quote && link?.orderId === payment.order_id) await reconcileCheckout(env, initial, quote, link, false, order, payment.id);
+    }
   }
-  if (['checkout.session.completed','checkout.session.expired'].includes(event.type))
-    await settleCheckout(env, initial, event.data.object);
   return json({received:true});
 }
+
 async function checkoutRoute(request, env, initial, url) {
   if (request.method !== 'POST') reject(405, 'Use POST for checkout.');
-  if (url.pathname === '/api/stripe/webhook') return stripeEvent(request, env, initial);
-  const publicOrigin = requireTrustedOrigin(request, url);
+  if (checkoutMode(env) === 'off') reject(503, 'Square checkout is not connected yet.');
+  if (url.pathname === '/api/square/webhook') return squareWebhook(request, env, initial);
+  const origin = requireTrustedOrigin(request, url);
   const body = await readForm(request);
-  if (url.pathname === '/api/checkout') return startCheckout(env, initial, body, publicOrigin, request);
-  if (url.pathname === '/api/checkout/cancel') return cancelCheckout(env, initial, body);
-  if (!stripeSessionId.test(body.session || '')) reject(400, 'Invalid checkout reference.');
-  if (checkoutMode(env) === 'off') reject(503, 'Checkout is unavailable.');
-  const session = await stripeRequest(env, 'checkout/sessions/' + body.session);
-  const status = await settleCheckout(env, initial, session);
-  if (status === 'unknown') reject(404, 'Order not found.');
-  return json({status,attempt:session.metadata?.attempt || null});
+  const attempt = url.pathname === '/api/checkout/status' ? body.session : body.attempt;
+  if (typeof attempt !== 'string' || !attemptId.test(attempt)) reject(400, 'Invalid checkout reference.');
+  if (url.pathname === '/api/checkout') return startCheckout(env, initial, body, origin, request);
+  const status = await checkoutState(env, initial, attempt, url.pathname === '/api/checkout/cancel');
+  return json({status, attempt});
 }
