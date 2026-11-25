@@ -114,6 +114,10 @@ async function applyListing(items,body,env) {
     if (!match || !(await env.BUCKET.head(imagePrefix+match[1]))) reject(400, 'Upload a product image.');
   }
   if (!Array.isArray(body.prices) || body.prices.length!==(old?.copies?.length || 1) || !body.prices.every(n=>quantity(n,999999999))) reject(400,'Enter a valid price for each copy.');
+  const previousPrices=old?.copies?.map(copy=>copy.cents) || [old?.cents];
+  if(body.prices.some((cents,index)=>cents===0 && previousPrices[index]!==0)){
+    reject(400,'Each new or updated price must be at least AUD 0.01.');
+  }
   if ((old?.checkoutHolds?.length || 0) > (body.quantity || 0)) reject(409,'Stock cannot be reduced below copies currently held at checkout.');
   const next = {...(old || {id:body.id || randomId(),format:body.category==='Singles'?'Trading card':body.category,collection:'recently-added',notes:''}),
     name:body.name.trim(), description:body.description.trim(), category:body.category, quantity:body.quantity, image:body.image, revision:old?old.revision+1:0};
@@ -209,12 +213,13 @@ export async function handleInventory(request, env, initial) {
         '/api/rewards/art/hill-club':['GET'], '/api/rewards/art/last-showing':['GET'], '/api/rewards/art/after-hours':['GET'],
         '/api/offers/list':['POST'], '/api/offers/lookup':['POST'], '/api/offers/submit':['POST'], '/api/offers/checkout':['POST'],
         '/api/staff/offers/list':['POST'], '/api/staff/offers/review':['POST'],
-        '/api/checkout':['POST'], '/api/checkout/status':['POST'], '/api/checkout/cancel':['POST'], '/api/square/webhook':['POST'],
+        '/api/checkout':['POST'], '/api/checkout/status':['POST'], '/api/checkout/tracking':['POST'], '/api/checkout/cancel':['POST'], '/api/square/webhook':['POST'],
       }[path];
       if (!methods) reject(404, 'Unknown route.');
       if (!methods.includes(request.method)) reject(405, 'Method unavailable.');
     }
     if (!env.BUCKET) reject(503,'Inventory storage is unavailable.');
+    if (path==='/api/checkout/tracking') return await orderTracking(request,env,url);
     if (path==='/api/rewards'||path.startsWith('/api/rewards/')) return await rewardsRoute(request,env,url);
     if (path.startsWith('/api/offers/')) return await offerRoute(request,env,initial,url);
     if (path.startsWith('/api/customer/')) return await customerRoute(request,env,url);

@@ -16,3 +16,5 @@ Use Node.js 22 and run `npm ci --ignore-scripts` before building or running the 
 Customers can sign in with a username and password or a configured identity provider. Staff review customer offers in the shop account menu. An accepted offer opens a Square checkout for one item at the agreed price plus shipping. Customers can track their offer status from any browser after signing in.
 
 The earlier storefront is available in the repository history at `d540507a2bf9bfb9c1c1253f482c2a83654b48ad`.
+
+After a paid checkout, the buyer can save their private tracking link. To update it, open the order under **Orders → Shipments → To-do** in Square Dashboard. Add the carrier and tracking number before marking the parcel as shipped. The tracking page reads the latest Square shipment details, and the carrier link shows scan updates.

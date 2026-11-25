@@ -16,7 +16,7 @@ const collections = {
   'pre-orders': { title: 'Pre-orders', intro: 'Reserve upcoming releases. Each open pre-order shows its expected dispatch date.' }
 };
 const dollars = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', currencyDisplay: 'code' });
-const price = cents => dollars.format(cents / 100);
+const price = cents => Number.isSafeInteger(cents) && cents > 0 ? dollars.format(cents / 100) : 'Price unavailable';
 const copyName = index => 'Copy ' + String.fromCharCode(65 + index);
 const copySelection = new Map();
 let inspectionFace = 'front';
@@ -25,7 +25,8 @@ function listingPrice(item) {
   const chosen = copySelection.get(item.id);
   const copy = item.copies[chosen];
   if (copy && (copy.canBuy || !item.canBuy)) return price(copy.cents);
-  return 'From ' + price(window.LemrixCollection.amount(item));
+  const lowest=window.LemrixCollection.amount(item);
+  return lowest > 0 ? 'From ' + price(lowest) : price(lowest);
 }
 function stockLabel(item) {
   if (item.collection === 'pre-orders') return cart.preorderStatus(item);
@@ -412,6 +413,7 @@ function setOwnedAttempt(attempt) {
   checkoutButton.disabled=checkoutInProgress();
 }
 function showRecovery(message='', {resume=false, check=false, cancel=false}={}) {
+  byId('recovery-track').hidden=true;
   byId('checkout-recovery').hidden=!message;
   byId('recovery-message').textContent=message;
   byId('recovery-resume').hidden=!resume;
@@ -473,6 +475,11 @@ async function checkOwnedCheckout(action='status') {
       setOwnedAttempt('');
       clearReturnQuery();
       showRecovery(action==='cancel' && result.status==='expired'?'Checkout cancelled.':terminalMessages[result.status]);
+      if (result.status === 'paid') {
+        const trackLink = byId('recovery-track');
+        trackLink.href = '#track/' + attempt;
+        trackLink.hidden = false;
+      }
     } else throw new Error('The checkout status could not be verified.');
   } catch (error) {
     if (attempt!==ownedAttempt) return;
@@ -598,8 +605,21 @@ function renderRoute(event) {
   const wasDetail = !!detailItem;
   detailItem = match ? products.find(item => item.id === match[1]) : null;
   if (searchDialog.open) dismissSearch();
+  byId('tracking-page').hidden=true;
   byId('cart').hidden=true;
   byId('cart-opener').removeAttribute('aria-current');
+  if (hash === '#track' || hash.startsWith('#track/')) {
+    byId('browse').hidden=true; byId('detail').hidden=true; byId('tracking-page').hidden=false;
+    byId('back-link').href='#catalogue';
+    byId('back-link').setAttribute('aria-label','Back to collection');
+    byId('back-link').title='Back to collection';
+    document.title='Track your order · Lemrix TCG';
+    if(event) { window.scrollTo(0,0); byId('tracking-heading').focus({preventScroll:true}); }
+    import('./tracking.js').then(module => {
+      if (currentHash() === hash) module.showTracking(hash);
+    }).catch(() => { byId('tracking-status').textContent='Tracking could not load. Refresh this page to try again.'; });
+    return;
+  }
   if (hash==='#cart' || new URLSearchParams(hash.slice(1)).get('category')==='Saved') {
     byId('browse').hidden=true; byId('detail').hidden=true;
     byId('back-link').href='#catalogue';

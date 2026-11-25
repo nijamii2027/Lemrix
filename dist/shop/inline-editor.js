@@ -53,6 +53,10 @@ window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemo
       const raw=input.value.trim();
       if(required && !raw)return label+' is required.';
       if(numeric==='price' && (!/^\d+(?:\.\d{0,2})?$/.test(raw) || Number(raw)>9999999.99))return 'Enter an AUD price with up to two decimal places.';
+      if(numeric==='price' && Number(raw)===0){
+        const previous=path==='cents'?model.original?.cents:model.original?.copies?.[path.split('.')[1]]?.cents;
+        if(previous!==0)return 'Enter a price of at least AUD 0.01.';
+      }
       if(numeric==='stock' && raw && (!/^\d+$/.test(raw) || Number(raw)>1000000))return 'Enter a whole stock quantity of 0–1,000,000.';
       if(numeric==='stock' && (model.row.checkoutHolds?.length || 0)>Number(raw))return 'Stock on hand must include all units held at checkout.';
       if(path==='card.year' && raw && !/^\d{4}$/.test(raw))return 'Enter a four-digit year.';

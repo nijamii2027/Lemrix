@@ -154,10 +154,12 @@ adminCookie = login.headers.get('Set-Cookie').split(';')[0];
 assert.equal((await request('/api/checkout',{...attempt(),expectedCents:1})).status,409);
 assert.equal((await request('/api/checkout',{...attempt(),copy:27})).status,409);
 assert.equal((await request('/api/checkout',{...attempt(),itemId:'moon-run'})).status,409);
+const track = (session, headers) => request('/api/checkout/tracking', {session}, headers);
 const sandboxOrder=attempt();
 assert.equal((await request('/api/checkout',sandboxOrder)).status,200);
 recordPayment(orderByAttempt.get(sandboxOrder.attempt));
 assert.equal((await (await request('/api/checkout/status',{session:sandboxOrder.attempt})).json()).status,'test-paid');
+assert.equal((await track(sandboxOrder.attempt)).status,404,'Sandbox purchases do not have a physical shipment');
 assert.equal(bucket.has('store/v1/catalogue.json'),false, 'Sandbox checkout cannot change live stock.');
 adminCookie = '';
 const rows=await shop();
@@ -190,6 +192,7 @@ assert.equal((await request('/api/checkout/cancel',{attempt:heldPreorder.attempt
 assert.equal((await shop()).find(item=>item.id==='upcoming').quantity,2);
 const paidPreorder=preorderAttempt();
 assert.equal((await request('/api/checkout',paidPreorder)).status,200);
+assert.equal((await track(paidPreorder.attempt)).status,404,'An open checkout is not a paid order');
 const incomingPayment = recordPayment(orderByAttempt.get(paidPreorder.attempt));
 assert.equal((await event(incomingPayment)).status,200);
 assert.equal((await event(incomingPayment)).status,200);
@@ -198,6 +201,36 @@ assert.equal(exhausted.quantity,0);
 assert.equal(exhausted.canBuy,false);
 assert.equal(exhausted.reserved,false);
 console.log('Verified guest pre-orders, dispatch terms, allocation limits, reservation release and payment settlement.');
+
+const paidSquareOrder = orderByAttempt.get(paidPreorder.attempt);
+const trackResponse = await track(paidPreorder.attempt);
+assert.equal(trackResponse.headers.get('cache-control'),'no-store');
+assert.deepEqual(await trackResponse.json(),{status:'paid',dispatch:'awaiting',shipments:[]});
+assert.equal((await track(paidPreorder.attempt,{Origin:'https://other.example'})).status,403);
+assert.equal((await track(randomUUID())).status,404);
+assert.equal((await track(heldPreorder.attempt)).status,404);
+assert.equal((await track(paidSquareOrder.id)).status,404);
+assert.equal((await request('/api/checkout/tracking')).status,405);
+paidSquareOrder.fulfillments = [{type:'SHIPMENT',state:'PREPARED',shipment_details:{
+  recipient:{display_name:'Private name',phone_number:'Private phone',email_address:'Private email',address:{postal_code:'Private postcode'}},
+  shipping_note:'Private note',carrier:'Australia Post',tracking_number:'ABC000128201000931406'
+}}];
+const dispatchShipment = {state:'processing',carrier:'Australia Post',trackingNumber:'ABC000128201000931406',
+  trackingUrl:'https://auspost.com.au/mypost/track/details/ABC000128201000931406'};
+assert.deepEqual(await (await track(paidPreorder.attempt)).json(),{status:'paid',dispatch:'processing',shipments:[dispatchShipment]});
+paidSquareOrder.fulfillments[0].state='COMPLETED';
+assert.equal((await (await track(paidPreorder.attempt)).json()).dispatch,'shipped');
+paidSquareOrder.fulfillments.push({type:'SHIPMENT',state:'PROPOSED',shipment_details:{carrier:'Other courier',tracking_url:'javascript:invalid'}});
+const partial = await (await track(paidPreorder.attempt)).json();
+assert.equal(partial.dispatch,'partial');
+assert.deepEqual(partial.shipments[1],{state:'awaiting',carrier:'Other courier'});
+paidSquareOrder.fulfillments[1].shipment_details.tracking_url='https://tracking.example/shipment/1234';
+assert.equal((await (await track(paidPreorder.attempt)).json()).shipments[1].trackingUrl,'https://tracking.example/shipment/1234');
+paidSquareOrder.reference_id = randomUUID();
+assert.equal((await track(paidPreorder.attempt)).status,409);
+paidSquareOrder.reference_id = paidPreorder.attempt;
+console.log('Verified private guest tracking for paid orders, split shipments, carrier links and fulfilment data minimisation.');
+
 
 // Cancel after the quote is durable but while Square is still creating its
 // link. A late response must neither expose that link nor strand any stock.

@@ -157,14 +157,17 @@
   // A per-product draft holds its inventory revision alongside the ordinary shop
   // model. Keep typed values separate so incomplete inputs survive navigation.
   function read(id){
-    return staged.get(id) || {row:originals.find(p=>p.id===id)};
+    const draft=staged.get(id);
+    if(draft)return draft;
+    const original=originals.find(p=>p.id===id);
+    return {row:original,original};
   }
   function draftFor(id){
     let draft=staged.get(id);
     if(!draft){
       const original=originals.find(p=>p.id===id);
       if(!original)return;
-      draft={row:structuredClone(original),inputs:new Map(),errors:new Map()};
+      draft={original,row:structuredClone(original),inputs:new Map(),errors:new Map()};
       staged.set(id,draft);
     }
     return draft;
@@ -233,7 +236,7 @@
     syncPreorderFields();
     const label=document.createElement('label');label.textContent='Price (AUD)';
     const input=document.createElement('input');
-    Object.assign(input,{name:'price',type:'number',min:'0',max:'9999999.99',step:'.01',required:true});
+    Object.assign(input,{name:'price',type:'number',min:'.01',max:'9999999.99',step:'.01',required:true});
     label.append(input);el('prices').replaceChildren(label);
     desk.open(null,()=>{dirty=true;});
     el('save').disabled=false;el('form-status').textContent='';

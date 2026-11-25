@@ -161,16 +161,16 @@
     }
     if (!staff && record.status === 'accepted') {
       const validity = document.createElement('small');
-      validity.textContent = 'Available while stock lasts';
+      validity.textContent = 'Valid for 7 days from acceptance, while stock lasts.';
       actions.append(validity,offerAction('Check out with Square',async () => {
-      if (checkoutInProgress()) throw new Error('Finish or cancel the open checkout first.');
-      const token = generation;
-      const result = await offerApi('offers/checkout',{id:record.id,version:record.version});
-      const url = squareAddress(result.url);
-      if (!attemptPattern.test(result.attempt) || !url) throw new Error('Square could not open this checkout.');
-      setOwnedAttempt(result.attempt);
-      if (dialog.open && view === 'account' && generation === token) location.assign(url);
-      else showRecovery('Your offer checkout is ready.',{resume:true,cancel:true});
+        if (checkoutInProgress()) throw new Error('Finish or cancel the open checkout first.');
+        const token = generation;
+        const result = await offerApi('offers/checkout',{id:record.id,version:record.version});
+        const url = squareAddress(result.url);
+        if (!attemptPattern.test(result.attempt) || !url) throw new Error('Square could not open this checkout.');
+        setOwnedAttempt(result.attempt);
+        if (dialog.open && view === 'account' && generation === token) location.assign(url);
+        else showRecovery('Your offer checkout is ready.',{resume:true,cancel:true});
       }));
     }
     if (!staff && record.status === 'pending') {

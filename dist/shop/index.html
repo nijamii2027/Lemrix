@@ -50,6 +50,7 @@
   <section class="checkout-recovery" id="checkout-recovery" hidden aria-label="Your Square checkout">
     <p id="recovery-message" role="status"></p>
     <div class="recovery-actions">
+      <a class="action" id="recovery-track" href="#track" hidden>Track your order</a>
       <button type="button" class="action" id="recovery-resume" hidden>Resume checkout</button>
       <button type="button" class="quiet-link" id="recovery-check" hidden>Check status</button>
       <button type="button" class="quiet-link" id="recovery-cancel" hidden>Cancel checkout</button>
@@ -114,6 +115,25 @@
         </aside>
       </div>
       <p id="cart-status" role="status"></p>
+      <a class="quiet-link" id="cart-track" href="#track">Track an order</a>
+    </section>
+    <section id="tracking-page" aria-labelledby="tracking-heading" hidden>
+      <a class="quiet-link" href="#catalogue">Continue shopping</a>
+      <h1 id="tracking-heading" tabindex="-1">Track your order</h1>
+      <form id="tracking-lookup">
+        <label for="tracking-reference">Order reference or tracking link</label>
+        <input id="tracking-reference" required autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="tracking-help">
+        <small id="tracking-help">Use the Lemrix link from your payment confirmation.</small>
+        <button class="action">Find order</button>
+      </form>
+      <p id="tracking-status" role="status" aria-live="polite"></p>
+      <ul id="tracking-shipments" hidden></ul>
+      <div id="tracking-actions" hidden>
+        <button type="button" id="tracking-refresh" class="quiet-link">Refresh status</button>
+        <button type="button" id="tracking-copy" class="quiet-link">Copy order link</button>
+      </div>
+      <input id="tracking-manual-copy" aria-label="Order tracking link to copy" readonly hidden>
+      <span id="tracking-copy-status" role="status"></span>
     </section>
     <article id="detail" hidden>
       <div class="detail-mast">

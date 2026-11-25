@@ -8,7 +8,7 @@ import { readRuntimeConfig } from '../lib/runtime-config.mjs';
 const PUBLIC_ORIGINS = new Set(['https://lemrix.vercel.app', 'https://lemrix-surf.vercel.app', 'https://lemrix.com.au', 'https://www.lemrix.com.au']);
 const COOKIE_NAMES = new Set(['__Host-lemrix-admin', '__Host-lemrix-customer', '__Host-lemrix-google', '__Host-lemrix-pass']);
 const READ_ONLY = new Set(['account', 'customer/session', 'rewards', 'rewards/code', 'rewards/art/hill-club', 'rewards/art/last-showing', 'rewards/art/after-hours']);
-const WRITE_ONLY = new Set(['offers/list', 'offers/lookup', 'offers/submit', 'offers/checkout', 'staff/offers/list', 'staff/offers/review', 'login', 'logout', 'logout-all', 'items/push', 'images', 'customer/challenge', 'customer/login', 'customer/register', 'customer/google', 'customer/apple', 'customer/logout', 'rewards/join', 'rewards/recover', 'checkout', 'checkout/status', 'checkout/cancel', 'square/webhook']);
+const WRITE_ONLY = new Set(['offers/list', 'offers/lookup', 'offers/submit', 'offers/checkout', 'staff/offers/list', 'staff/offers/review', 'login', 'logout', 'logout-all', 'items/push', 'images', 'customer/challenge', 'customer/login', 'customer/register', 'customer/google', 'customer/apple', 'customer/logout', 'rewards/join', 'rewards/recover', 'checkout', 'checkout/status', 'checkout/tracking', 'checkout/cancel', 'square/webhook']);
 const MAX_BODY = 4_400_000;
 
 function fail(status, message) { const error = new Error(message); error.status = status; throw error; }
@@ -91,6 +91,12 @@ export function createGateway({env = process.env, app = application, bucket, con
       const nativeRequest = new Request(origin + selected.pathname, {method:request.method === 'HEAD' ? 'GET' : request.method, headers, body});
       const result = await app.fetch(nativeRequest, {...env, ...config, BUCKET:storage, CLIENT_IP:clientIp(request), REQUIRE_STORED_CATALOGUE:true});
       response.statusCode = result.status;
+      // Uploaded listing photos get a new media ID on every edit. Let returning
+      // visitors reuse the image while keeping CDN and account responses private.
+      if (selected.pathname.startsWith('/media/') && result.status === 200 &&
+          /^image\/(?:jpeg|png|webp)$/.test(result.headers.get('content-type') || '')) {
+        response.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+      }
       for (const key of ['content-type', 'content-disposition', 'retry-after', 'vary']) {
         const value = result.headers.get(key);
         if (value) response.setHeader(key, value);

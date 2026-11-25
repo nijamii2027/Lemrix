@@ -367,3 +367,16 @@ html[data-motion="reduced"] #search-dialog[open],html[data-motion="reduced"] #se
 
 #categories [data-custom-category]{max-width:min(15rem,80vw);overflow-wrap:anywhere;text-align:left}
 #categories select{pointer-events:auto;padding:.45rem .6rem;border:1px solid var(--line);border-radius:5px;background:var(--paper,#fff);color:var(--ink);font:inherit}
+
+#tracking-page{width:min(36rem,100%);margin:0 auto;padding:clamp(1.2rem,5vw,3rem) var(--gutter) 4rem}
+#tracking-page h1{font:800 clamp(2.4rem,6.3vw,4rem)/1 'Barlow Display',DM,sans-serif;text-transform:uppercase;margin:1.6rem 0}
+#tracking-lookup{display:grid;gap:.6rem}
+#tracking-lookup label,#tracking-shipments strong{font-weight:700}
+#tracking-page input{width:100%;border:1px solid var(--line);border-radius:8px;padding:.7rem;background:white;font:inherit;color:inherit}
+#tracking-lookup .action{justify-self:start}
+#tracking-status{margin:1.3rem 0 .6rem}
+#tracking-shipments{padding:0;list-style:none}
+#tracking-shipments li{display:grid;gap:.35rem;margin:.65rem 0;padding:1rem;border:1px solid var(--line);border-radius:.65rem;overflow-wrap:anywhere}
+#tracking-shipments a{justify-self:start;text-decoration:underline;text-underline-offset:.15em}
+#tracking-actions{display:flex;gap:1.3rem;flex-wrap:wrap;margin:1rem 0}
+#tracking-copy-status{display:block;margin:.4rem 0}

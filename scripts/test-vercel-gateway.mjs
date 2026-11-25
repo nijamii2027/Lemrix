@@ -97,6 +97,7 @@ try {
       [api('images'), 'POST', '/api/images'],
       [api('rewards/art/hill-club'), 'GET', '/api/rewards/art/hill-club'],
       [api('checkout/status'), 'POST', '/api/checkout/status'],
+      [api('checkout/tracking'), 'POST', '/api/checkout/tracking'],
     ]) {
       const result = await call(path, method === 'POST' ? post({fixture:true}) : {});
       assert.equal(result.status, 200);
@@ -287,6 +288,8 @@ try {
     const path = '/api/gateway?resource=media&id=' + 'a'.repeat(32);
     const result = await call(path);
     assert.deepEqual(result.body, data);
+    assert.equal(result.headers['cache-control'], 'private, max-age=31536000, immutable');
+    assert.equal(result.headers['cdn-cache-control'], 'no-store');
     assert.equal(result.headers['content-type'], 'image/webp');
     assert.equal(result.headers['content-disposition'], 'inline; filename="fixture.webp"');
     let cancelled = false;

@@ -42,6 +42,7 @@ window.LemrixCart = (() => {
     const listing = item && (item.copies ? item.copies[copy] : copy === null ? item : null);
     let reason = '';
     if (!listing) reason = 'Listing no longer available';
+    else if (!Number.isSafeInteger(listing.cents) || listing.cents <= 0) reason = 'Price unavailable';
     else if (item.collection === 'pre-orders' && preorderStatus(item) !== 'Pre-order') reason = preorderStatus(item);
     else if (listing.sold) reason = 'Sold out';
     else if (listing.reserved || item.reserved) reason = 'Temporarily reserved';

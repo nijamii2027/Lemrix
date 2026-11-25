@@ -45,7 +45,8 @@ window.LemrixCollection=(()=>{
   function amount(item) {
     if (!item.copies?.length) return item.cents;
     const available=item.copies.filter(copy=>copy.canBuy);
-    return Math.min(...(available.length?available:item.copies).map(copy=>copy.cents));
+    const prices=(available.length?available:item.copies).map(copy=>copy.cents).filter(cents=>Number.isSafeInteger(cents) && cents>0);
+    return prices.length?Math.min(...prices):0;
   }
   const eq=(a,b)=>norm(a)===norm(b);
   let era='',catalogue=[],current=null,front='',back='',side='front';
