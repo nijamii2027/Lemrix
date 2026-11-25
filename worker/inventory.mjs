@@ -64,13 +64,21 @@ async function getCatalogue(env, initial) {
 }
 async function applyListing(items,body,env) {
   if (!body || typeof body !== 'object') reject(400,'Invalid listing.');
-  if (!isText(body.name,100) || !isText(body.description,3000) || !categories.has(body.category) || (body.quantity !== null && !quantity(body.quantity,1000000))) reject(400,'Check the name, description, category and stock quantity.');
   if (body.id != null && !isText(body.id,100)) reject(400,'Invalid listing.');
   const index = body.id ? items.findIndex(p=>p.id===body.id) : -1;
   if (body.create && (index >= 0 || !/^[a-f0-9]{32}$/.test(body.id))) reject(409,'This listing already exists. Refresh the shop.');
   if (body.id && !body.create && index<0) reject(404,'Listing not found.');
   const old = items[index];
+  if (old?.archived) reject(409,'This listing has already been removed. Refresh the shop.');
   if (old && body.revision !== old.revision) reject(409,'Someone edited this listing. Refresh before saving.');
+  if (body.remove === true) {
+    if (!old || body.create) reject(400,'Choose a published product to remove.');
+    if (old.checkoutHolds?.length) reject(409,old.name+' has items held at checkout. Try again after the checkout ends.');
+    old.archived = true;
+    old.revision++;
+    return old.id;
+  }
+  if (!isText(body.name,100) || !isText(body.description,3000) || !categories.has(body.category) || (body.quantity !== null && !quantity(body.quantity,1000000))) reject(400,'Check the name, description, category and stock quantity.');
   if (!old || body.image !== old.image) {
     const match = typeof body.image==='string' && body.image.match(photoPath);
     if (!match || !(await env.BUCKET.head(imagePrefix+match[1]))) reject(400, 'Upload a product image.');
@@ -170,16 +178,14 @@ export async function handleInventory(request, env, initial) {
     if (path==='/shop/catalogue.js' && request.method==='GET') {
       let {items}=await getCatalogue(env,initial);
       const mode = checkoutMode(env);
-      if (mode === 'live') {
-        const due = items.find(item => item.checkoutHolds?.some(h => h.provider === 'square' && h.expires <= Date.now()/1000));
-        if (due) {
-          try {
-            await refreshReservations(env, initial, due);
-            ({items} = await getCatalogue(env, initial));
-          } catch { /* Display conservative availability until Square can be reached. */ }
-        }
+      if (mode === 'live' && await refreshReservations(env, initial, items)) {
+        ({items} = await getCatalogue(env, initial));
       }
-      return new Response('const products = '+JSON.stringify(items.map(item => forShop(item, mode)))+';', {headers:{...errors,'Content-Type':'application/javascript; charset=utf-8'}});
+      const catalogue = items.filter(item => !item.archived).map(item => forShop(item, mode));
+      if (request.headers.get('Accept')?.split(',').some(type => type.trim().split(';')[0] === 'application/json')) {
+        return json(catalogue, 200, {Vary:'Accept'});
+      }
+      return new Response('const products = '+JSON.stringify(catalogue)+';', {headers:{...errors,Vary:'Accept','Content-Type':'application/javascript; charset=utf-8'}});
     }
     if (image && (request.method==='GET' || request.method==='HEAD')) {
       const object=await env.BUCKET[request.method==='HEAD'?'head':'get'](imagePrefix+image[1]);
@@ -196,7 +202,7 @@ export async function handleInventory(request, env, initial) {
     if ((path==='/api/logout' || path==='/api/logout-all') && request.method==='POST') {
       return await adminLogout(env,session,path==='/api/logout-all');
     }
-    if (path==='/api/items' && request.method==='GET') return json((await getCatalogue(env,initial)).items);
+    if (path==='/api/items' && request.method==='GET') return json((await getCatalogue(env,initial)).items.filter(item => !item.archived));
     if (path==='/api/items' && request.method==='POST') return await saveListings([await readForm(request)],env,initial);
     if (path==='/api/items/push' && request.method==='POST') return await saveListings((await readForm(request,1024*1024)).changes,env,initial);
     if (path==='/api/images' && request.method==='POST') {

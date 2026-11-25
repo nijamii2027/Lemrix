@@ -347,3 +347,9 @@ html[data-motion="reduced"] *,html[data-motion="reduced"] *::before,html[data-mo
 html[data-motion="reduced"] #search-dialog[open],html[data-motion="reduced"] #search-dialog[open]::backdrop{animation-duration:1ms}
 
 #add-to-cart:disabled{opacity:.55;cursor:default}
+
+.checkout-recovery{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px 24px;padding:12px var(--gutter);background:#eff3f8;border-bottom:1px solid var(--line)}
+.checkout-recovery p{font-size:.9rem}
+.recovery-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 18px}
+.recovery-actions .quiet-link{min-height:40px;text-decoration:underline;text-underline-offset:3px}
+#add-to-cart:disabled{opacity:.58;cursor:default}

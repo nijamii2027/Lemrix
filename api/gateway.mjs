@@ -83,6 +83,7 @@ export function createGateway({env = process.env, app = application, bucket, con
       const incomingCookies = typeof request.headers.cookie === 'string' ? request.headers.cookie : '';
       const cookies = incomingCookies.split(/;\s*/).filter(part => COOKIE_NAMES.has(part.split('=')[0])).join('; ');
       if (cookies) headers.set('Cookie', cookies);
+      if (selected.pathname === '/shop/catalogue.js' && request.headers.accept) headers.set('Accept', request.headers.accept);
       if (request.headers.origin) headers.set('Origin', request.headers.origin);
       if (request.headers['content-type']) headers.set('Content-Type', request.headers['content-type']);
       if (webhook && request.headers['x-square-hmacsha256-signature']) headers.set('x-square-hmacsha256-signature', request.headers['x-square-hmacsha256-signature']);
@@ -90,7 +91,7 @@ export function createGateway({env = process.env, app = application, bucket, con
       const nativeRequest = new Request(origin + selected.pathname, {method:request.method === 'HEAD' ? 'GET' : request.method, headers, body});
       const result = await app.fetch(nativeRequest, {...env, ...config, BUCKET:storage, CLIENT_IP:clientIp(request), REQUIRE_STORED_CATALOGUE:true});
       response.statusCode = result.status;
-      for (const key of ['content-type', 'content-disposition', 'retry-after']) {
+      for (const key of ['content-type', 'content-disposition', 'retry-after', 'vary']) {
         const value = result.headers.get(key);
         if (value) response.setHeader(key, value);
       }

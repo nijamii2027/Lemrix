@@ -49,6 +49,14 @@
       <button type="button" id="account-opener" class="account-opener" aria-label="Shop account"><span class="account-glyph" aria-hidden="true"></span><span id="account-nav-label">Sign in</span></button>
     </div>
   </header>
+  <section class="checkout-recovery" id="checkout-recovery" hidden aria-label="Your Square checkout">
+    <p id="recovery-message" role="status"></p>
+    <div class="recovery-actions">
+      <button type="button" class="action" id="recovery-resume" hidden>Resume checkout</button>
+      <button type="button" class="quiet-link" id="recovery-check" hidden>Check status</button>
+      <button type="button" class="quiet-link" id="recovery-cancel" hidden>Cancel checkout</button>
+    </div>
+  </section>
   <main id="main" tabindex="-1">
     <section id="browse" aria-label="Shop collection">
       <aside class="rail" aria-label="Collection filters">
@@ -103,7 +111,7 @@
       <div class="cart-body">
         <ul id="cart-lines"></ul>
         <aside id="cart-summary" hidden aria-label="Order summary">
-          <p><span>Subtotal</span><strong id="cart-total"></strong></p>
+          <p><span id="cart-subtotal-label">Subtotal</span><strong id="cart-total"></strong></p>
           <small id="cart-note"></small><button class="quiet-link" type="button" id="cart-rewards">Collector rewards</button><button class="action" type="button" id="cart-checkout">Checkout</button>
         </aside>
       </div>

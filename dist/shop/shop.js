@@ -22,13 +22,22 @@ let inspectionFace = 'front';
 function listingPrice(item) {
   if (!item.copies) return price(item.cents);
   const chosen = copySelection.get(item.id);
-  if (chosen !== undefined) return price(item.copies[chosen].cents);
-  return 'From ' + price(Math.min(...item.copies.map(copy => copy.cents)));
+  const copy = item.copies[chosen];
+  if (copy && (copy.canBuy || !item.canBuy)) return price(copy.cents);
+  return 'From ' + price(window.LemrixCollection.amount(item));
+}
+function stockLabel(item) {
+  if (item.collection === 'pre-orders') return 'Pre-order preview';
+  if (item.reserved) return 'Temporarily reserved';
+  if (Number.isInteger(item.quantity)) {
+    const quantity=window.LemrixCollection.stockCount(item);
+    if (quantity>0) return quantity+' in stock';
+    return item.copies?.some(copy => copy.reserved) ? 'Temporarily reserved' : 'Sold out';
+  }
+  return item.checkoutMode === 'test' ? 'Test listing' : 'Preview only';
 }
 function itemFormat(item) {
-  const stock = item.reserved ? ' · Temporarily reserved'
-    : Number.isInteger(item.quantity) ? (item.quantity ? ' · ' + item.quantity + ' in stock' : ' · Sold out') : '';
-  return item.format + stock + (item.collection === 'pre-orders' ? ' · Pre-order preview' : '');
+  return [item.format, stockLabel(item)].filter(Boolean).join(' · ');
 }
 const imagePath = item => item.image || 'art/' + item.id + '.webp';
 const detailHash = item => '#item/' + item.id;
@@ -131,6 +140,7 @@ function selectProduct(item) {
   byId('featured-detail').href = detailHash(item);
   byId('position').textContent = String(activeIndex + 1).padStart(2, '0') + ' / ' + String(list.length).padStart(2, '0');
   for (const id of ['prev', 'next']) byId(id).disabled = list.length < 2;
+  window.shopEditor?.renderShowroom?.(item);
 }
 
 function step(direction) {
@@ -154,12 +164,13 @@ function tileFor(item) {
   title.textContent = item.name;
   const format = document.createElement('p');
   format.className = 'tile-type';
-  format.textContent = [item.card?.set,item.card?.cardNumber,item.card?.language].filter(Boolean).join(' · ') || itemFormat(item);
+  const cardInfo = [item.card?.set,item.card?.cardNumber,item.card?.language].filter(Boolean);
+  format.textContent = cardInfo.length ? [...cardInfo,stockLabel(item)].join(' · ') : itemFormat(item);
   const amount = document.createElement('p');
   amount.className = 'tile-price';
   amount.textContent = listingPrice(item);
   link.append(art, title, format, amount);
-  return link;
+  return window.shopEditor?.decorateTile?.(item,link) || link;
 }
 
 function addProductTile() {
@@ -219,10 +230,9 @@ function updateCartState() {
   if (!detailItem) return;
   const copy=detailItem.copies ? copySelection.get(detailItem.id) ?? 0 : null;
   const present=cart.contains(detailItem.id,copy);
-  const selected=copy===null?detailItem:detailItem.copies[copy];
-  const unavailable=!present && detailItem.checkoutMode==='live' && Number.isInteger(detailItem.quantity) && !selected.canBuy;
-  byId('add-to-cart').disabled=unavailable;
-  byId('cart-label').textContent=present?'View cart':unavailable?'Unavailable':'Add to cart';
+  const {reason}=cart.availability(detailItem,copy);
+  byId('add-to-cart').disabled=!present && !!reason;
+  byId('cart-label').textContent=present?'View cart':reason || 'Add to cart';
 }
 window.addEventListener('lemrix-cart-change',updateCartState);
 
@@ -251,8 +261,9 @@ function offerCopies(item) {
   if (!item.copies) { renderCheckout(item, item); window.LemrixOffers?.setCopy(null); byId('detail-price').textContent = price(item.cents); return; }
   inspectionFace = 'front';
   const routeCopy = new URLSearchParams(location.hash.split('?')[1] || '').get('copy');
-  const remembered = history.state?.lemrixCopy ?? (routeCopy === null ? undefined : Number(routeCopy));
-  const initial = Number.isInteger(remembered) && item.copies[remembered] ? remembered : copySelection.get(item.id) ?? 0;
+  const remembered = routeCopy !== null ? Number(routeCopy) : history.state?.lemrixCopy ?? copySelection.get(item.id);
+  const firstAvailable = item.copies.findIndex(copy => copy.canBuy);
+  const initial = Number.isInteger(remembered) && item.copies[remembered] ? remembered : Math.max(0, firstAvailable);
   copySelection.set(item.id, initial);
   const options = item.copies.map((copy, index) => {
     const label = document.createElement('label');
@@ -264,14 +275,14 @@ function offerCopies(item) {
     const name = document.createElement('strong');
     name.textContent = copyName(index);
     const description = document.createElement('span');
-    description.textContent = copy.condition;
+    description.textContent = [copy.condition,cart.availability(item,index).reason].filter(Boolean).join(' · ');
     const amount = document.createElement('small');
     amount.textContent = price(copy.cents);
     label.append(input, name, description, amount);
     input.addEventListener('change', () => {
       if (!input.checked) return;
       copySelection.set(item.id, index);
-      try { history.replaceState({ ...history.state, lemrixCopy: index }, ''); } catch {}
+      try { history.replaceState({ ...history.state, lemrixCopy: index }, '', '#item/'+item.id+'?copy='+index); } catch {}
       paintInspection();
       window.LemrixCollection.inspect(item,index);
       window.shopEditor?.renderFacts(item);
@@ -291,7 +302,24 @@ for (const face of ['front', 'back']) {
 }
 const checkoutButton = byId('checkout-button');
 const checkoutNotice = byId('checkout-status');
-let checkoutChoice = '', checkoutAttempt, checkoutBusy = false;
+let checkoutChoice = '', openingCheckout = false;
+const recoveryKey = 'lemrix-square-checkout-v1';
+const openingKey = 'lemrix-square-opening-v1';
+const attemptPattern = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
+const terminalMessages = {
+  'paid':'Payment confirmed. Thank you for your order.',
+  'test-paid':'Test payment confirmed. No money was charged.',
+  'expired':'This checkout has ended.',
+  'closed':'Checkout closed.'
+};
+let ownedAttempt = '', uncertainAttempt = '';
+try {
+  const saved=sessionStorage.getItem(recoveryKey);
+  if (attemptPattern.test(saved)) ownedAttempt=saved;
+  uncertainAttempt=sessionStorage.getItem(openingKey) || '';
+} catch {}
+let recoveryBusy = false, stockRequest, lastStockRead = Date.now();
+function checkoutInProgress() { return openingCheckout || !!ownedAttempt; }
 function checkoutMessage(message) {
   checkoutNotice.textContent = message;
   checkoutNotice.hidden = !message;
@@ -301,79 +329,185 @@ function renderCheckout(item, selected) {
   const choice = JSON.stringify([item.id, index, selected.cents]);
   if (choice !== checkoutChoice) {
     checkoutChoice = choice;
-    checkoutAttempt = null;
     checkoutMessage('');
   }
-  checkoutButton.hidden = !selected.canBuy;
-  checkoutButton.disabled = checkoutBusy;
+  const {reason}=cart.availability(item,index);
+  checkoutButton.hidden = !!reason;
+  checkoutButton.disabled = checkoutInProgress();
   checkoutButton.textContent = item.checkoutMode === 'test' ? 'Test checkout' : 'Buy now';
-  const setupPending = item.checkoutMode === 'off' && item.collection !== 'pre-orders';
   const note = byId('checkout-note');
-  note.hidden = !selected.canBuy && !setupPending;
-  note.textContent = setupPending ? 'Online checkout is being set up.'
-    : item.checkoutMode === 'test' ? 'Square test checkout · No charge' : 'Square checkout · Ships within Australia';
+  note.hidden = false;
+  note.textContent = reason || (item.checkoutMode === 'test' ? 'Square test checkout · No charge' : 'Square checkout · Ships within Australia');
 }
 async function checkoutPost(path, body) {
   const response = await fetch('/api/checkout' + path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   const data = await response.json().catch(()=>null);
-  if (!response.ok || !data) throw new Error(data?.error || 'Checkout is unavailable. Please try again.');
+  if (!response.ok || !data) {
+    const error=new Error(data?.error || 'Checkout is unavailable. Please try again.');
+    error.status=response.status;
+    throw error;
+  }
   return data;
 }
-checkoutButton.addEventListener('click', async () => {
-  if (checkoutBusy || !detailItem) return;
-  const [itemId, copy, expectedCents] = JSON.parse(checkoutChoice);
-  if (!checkoutAttempt || Date.now()/1000 - checkoutAttempt.started > 540)
-    checkoutAttempt = {attempt:crypto.randomUUID(), started:Math.floor(Date.now()/1000)};
-  const choiceAtClick = checkoutChoice;
-  checkoutBusy = true;
-  checkoutButton.disabled = true;
-  checkoutMessage('Opening secure checkout…');
+function markUnconfirmed(attempt) {
+  uncertainAttempt=attempt;
   try {
-    const result = await checkoutPost('', {itemId, copy, expectedCents, ...checkoutAttempt});
-    if (choiceAtClick === checkoutChoice && detailItem?.id === itemId) window.location.assign(result.url);
+    if (attempt) sessionStorage.setItem(openingKey,attempt);
+    else sessionStorage.removeItem(openingKey);
+  } catch {}
+}
+function setOwnedAttempt(attempt) {
+  if (uncertainAttempt && uncertainAttempt!==attempt) markUnconfirmed('');
+  ownedAttempt=attempt;
+  try {
+    if (attempt) sessionStorage.setItem(recoveryKey,attempt);
+    else sessionStorage.removeItem(recoveryKey);
+  } catch {}
+  cart.refresh();
+  checkoutButton.disabled=checkoutInProgress();
+}
+function showRecovery(message='', {resume=false, check=false, cancel=false}={}) {
+  byId('checkout-recovery').hidden=!message;
+  byId('recovery-message').textContent=message;
+  byId('recovery-resume').hidden=!resume;
+  byId('recovery-check').hidden=!check;
+  byId('recovery-cancel').hidden=!cancel;
+}
+function squareAddress(value) {
+  if (typeof value!=='string') return null;
+  try {
+    const url=new URL(value);
+    if (!url.username && !url.password && ['https://square.link','https://checkout.square.site','https://sandbox.square.link'].includes(url.origin)) return url.href;
+  } catch {}
+  return null;
+}
+async function refreshStock(force=false) {
+  if (window.shopEditor?.active || (!force && Date.now()-lastStockRead<15000)) return;
+  if (stockRequest) return stockRequest;
+  stockRequest=(async()=>{
+    const response=await fetch('/shop/catalogue.js',{headers:{Accept:'application/json'},cache:'no-store'});
+    if (!response.ok) return;
+    const rows=await response.json();
+    if (!Array.isArray(rows) || window.shopEditor?.active) return;
+    lastStockRead=Date.now();
+    if (JSON.stringify(rows)===JSON.stringify(products)) return;
+    products.splice(0,products.length,...rows);
+    window.shopEditor?.refreshPublished?.(rows);
+    rebuildGallery();
+    renderRoute();
+    if (searchDialog.open) renderSearch();
+  })().catch(()=>{}).finally(()=>{stockRequest=null;});
+  return stockRequest;
+}
+function clearReturnQuery() {
+  const url=new URL(location.href);
+  for (const key of ['checkout','attempt','released']) url.searchParams.delete(key);
+  history.replaceState(history.state,'',url);
+}
+async function checkOwnedCheckout(action='status') {
+  const attempt=ownedAttempt;
+  if (!attempt || recoveryBusy || openingCheckout) return;
+  recoveryBusy=true;
+  showRecovery(action==='cancel'?'Closing your Square checkout…':'Checking your Square checkout…');
+  try {
+    const result=await checkoutPost(action==='cancel'?'/cancel':'/status', action==='cancel'?{attempt}:{session:attempt});
+    if (attempt!==ownedAttempt || result.attempt!==attempt) return;
+    if (result.status==='pending') {
+      const link=squareAddress(result.url);
+      if (link && uncertainAttempt===attempt) markUnconfirmed('');
+      if (action==='resume' && link) { location.assign(link); return; }
+      const waiting = result.preparing ? 'Your Square link is still being prepared. Check again or cancel this checkout.' :
+        'Square is checking this payment. Your items stay reserved while payment is in progress.';
+      showRecovery(link?'Your Square checkout is still open. Resume it or cancel to release your items.':waiting,
+        {resume:!!link,check:!link,cancel:!!link || result.preparing===true});
+    } else if (Object.hasOwn(terminalMessages,result.status)) {
+      if (result.status==='paid' || result.status==='test-paid') cart.complete(attempt);
+      try { sessionStorage.removeItem('cart-order-'+attempt); } catch {}
+      setOwnedAttempt('');
+      clearReturnQuery();
+      showRecovery(action==='cancel' && result.status==='expired'?'Checkout cancelled.':terminalMessages[result.status]);
+    } else throw new Error('The checkout status could not be verified.');
   } catch (error) {
-    checkoutMessage(error.message);
+    if (attempt!==ownedAttempt) return;
+    if (error.status===404 && uncertainAttempt===attempt) {
+      showRecovery('Square has not confirmed that a checkout was created. Check again or cancel this attempt before starting over.',{check:true,cancel:true});
+    } else if (error.status===404) {
+      setOwnedAttempt('');
+      clearReturnQuery();
+      try { sessionStorage.removeItem('cart-order-'+attempt); } catch {}
+      showRecovery('No open checkout was found.');
+    } else showRecovery('Could not verify your Square checkout. Check its status or request cancellation.',{check:true,cancel:true});
   } finally {
-    checkoutBusy = false;
-    checkoutButton.disabled = false;
+    recoveryBusy=false;
+    await refreshStock(true);
+  }
+}
+byId('recovery-resume').addEventListener('click',()=>checkOwnedCheckout('resume'));
+byId('recovery-cancel').addEventListener('click',()=>checkOwnedCheckout('cancel'));
+byId('recovery-check').addEventListener('click',()=>checkOwnedCheckout());
+
+async function startCustomerCheckout(selection) {
+  if (checkoutInProgress()) return;
+  const attempt=crypto.randomUUID(), started=Math.floor(Date.now()/1000);
+  const route=location.hash;
+  openingCheckout=true;
+  showRecovery();
+  setOwnedAttempt(attempt);
+  markUnconfirmed(attempt);
+  if (selection.lines) {
+    try { sessionStorage.setItem('cart-order-'+attempt,JSON.stringify(selection.lines)); } catch {}
+  }
+  try {
+    const result=await checkoutPost('',{attempt,started,...selection});
+    const url=squareAddress(result.url);
+    if (result.attempt!==attempt || !url) throw new Error('Could not verify the Square checkout address.');
+    markUnconfirmed('');
+    if (location.hash===route) location.assign(url);
+    else showRecovery('Your Square checkout is ready.',{resume:true,cancel:true});
+  } catch (error) {
+    if (error.status>=400 && error.status<500) {
+      setOwnedAttempt('');
+      try { sessionStorage.removeItem('cart-order-'+attempt); } catch {}
+      await refreshStock(true);
+    } else {
+      showRecovery('Could not verify whether Square opened your checkout. Check its status or cancel this attempt.',{check:true,cancel:true});
+    }
+    throw error;
+  } finally {
+    openingCheckout=false;
+    checkoutButton.disabled=checkoutInProgress();
+    cart.refresh();
+  }
+}
+checkoutButton.addEventListener('click', async () => {
+  if (checkoutInProgress() || !detailItem) return;
+  const [itemId, copy, expectedCents] = JSON.parse(checkoutChoice);
+  if (cart.availability(detailItem,copy).reason) return;
+  checkoutMessage('Opening secure checkout…');
+  try { await startCustomerCheckout({itemId,copy,expectedCents}); }
+  catch(error) { checkoutMessage(error.message); }
+});
+function checkoutReturn() {
+  const params=new URLSearchParams(location.search);
+  const session=params.get('checkout');
+  const attempt=session==='cancelled'?params.get('attempt'):session;
+  if (attemptPattern.test(attempt)) {
+    // Only an explicit cancel action from this tab may close a live payment link.
+    setOwnedAttempt(attempt);
+  }
+  if (ownedAttempt) return checkOwnedCheckout();
+}
+window.addEventListener('pageshow',event=>{
+  if (event.persisted) {
+    if (ownedAttempt) checkOwnedCheckout();
+    else refreshStock(true);
   }
 });
-async function checkoutReturn() {
-  const url = new URL(location.href);
-  const session = url.searchParams.get('checkout');
-  const fromCart = location.hash==='#cart';
-  if (!session || (!detailItem && !fromCart)) return;
-  const feedback = fromCart ? cart.message : checkoutMessage;
-  if (session === 'cancelled') {
-    try {
-      const result = await checkoutPost('/cancel', {attempt:url.searchParams.get('attempt'), itemId:detailItem?.id});
-      feedback(result.status === 'paid' ? 'Payment confirmed. Thank you for your order.' : 'Checkout closed.');
-      if (result.status === 'expired' && !url.searchParams.has('released')) {
-        url.searchParams.set('released','1');
-        location.replace(url);
-        return;
-      }
-    } catch {
-      feedback('Checkout closed. Refresh to check the reservation.');
-      return;
-    }
-
-  } else {
-    feedback('Confirming your payment…');
-    try {
-      const {status,attempt} = await checkoutPost('/status', {session});
-      const messages = {'test-paid':'Test payment confirmed. No money was charged.', paid:'Payment confirmed. Thank you for your order.', expired:'This checkout has expired.', pending:'Payment is still processing. Refresh to check again.'};
-      if(fromCart && (status==='paid' || status==='test-paid')) cart.complete(attempt);
-      feedback(messages[status] || 'Payment status unavailable.');
-      if (status === 'pending') return;
-    } catch {
-      feedback('Payment confirmation is unavailable. Refresh to check again before placing another order.');
-      return;
-    }
-  }
-  for (const key of ['checkout','attempt','released']) url.searchParams.delete(key);
-  history.replaceState(history.state, '', url);
-}
+document.addEventListener('visibilitychange',()=>{
+  if (document.visibilityState!=='visible') return;
+  if (ownedAttempt) checkOwnedCheckout();
+  else refreshStock();
+});
 if (products.some(p => p.checkoutMode === 'live' || p.checkoutMode === 'off')) {
   byId('shop-mode').textContent = 'Lemrix shop · AUD';
   byId('search-prices').textContent = 'Prices in Australian dollars';
@@ -389,16 +523,14 @@ function renderDetail(item) {
   byId('detail-name').textContent = item.name;
   byId('detail-family').textContent = item.category + (item.checkoutMode !== 'test' && item.quantity != null ? ' / AUD' : ' / Sample AUD price');
   byId('detail-format').textContent = itemFormat(item);
-  byId('availability').textContent = item.collection === 'pre-orders'
-    ? 'This is a pre-order concept with an illustrative price. Release dates and reservations will be announced when confirmed.'
-    : 'This is a demo catalogue with sample AUD prices. Stock and ordering will appear when the shop opens.';
-  if (item.collection !== 'pre-orders' && item.checkoutMode === 'live' && item.quantity != null) byId('availability').textContent = item.canBuy ? 'Available to order. Prices are in Australian dollars.' : 'Currently unavailable.';
-  if (item.collection !== 'pre-orders' && item.checkoutMode === 'off' && item.quantity != null) {
-    byId('availability').textContent = item.quantity > 0 ? 'In stock.' : 'Currently unavailable.';
-  }
-  const defaultAvailability=byId('availability').textContent;
-  if(item.availability) byId('availability').textContent=item.availability;
-  if (item.reserved) byId('availability').textContent = 'Reserved in another checkout. Refresh later to check availability.';
+  const stock = stockLabel(item);
+  const defaultAvailability = item.collection === 'pre-orders'
+    ? 'Pre-order preview. Orders will open when the release is confirmed.'
+    : item.reserved ? 'Temporarily reserved in an open checkout.'
+    : item.canBuy ? 'Available to order. Prices are in Australian dollars.'
+    : item.checkoutMode === 'off' && item.quantity > 0 ? 'In stock. Online checkout is unavailable.'
+    : stock+'.';
+  byId('availability').textContent=item.availability && item.canBuy ? item.availability : defaultAvailability;
   offerCopies(item);
   byId('detail-description').textContent = item.description;
   byId('detail-notes').textContent = item.notes;
@@ -426,6 +558,7 @@ function renderRoute(event) {
     byId('back-link').setAttribute('aria-label','Back to collection');
     byId('back-link').title='Back to collection';
     cart.open(); cart.refresh();
+    if (event) refreshStock();
     if(event) { window.scrollTo(0,0); byId('cart-title').focus({preventScroll:true}); }
     return;
   }

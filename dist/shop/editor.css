@@ -87,3 +87,37 @@ body:not(.shop-editing) .catalogue-add {display:none}
 @media(hover:none) {.catalogue-add-label {opacity:1}}
 html[data-motion="reduced"] .catalogue-add,
 html[data-motion="reduced"] .catalogue-add :is(.catalogue-add-mark,.catalogue-add-label) {transition:none}
+
+/* The same stock controls follow a product through both shop views. */
+.inventory-panel{display:none}
+.shop-editing .inventory-panel{display:flex;align-items:center;flex-wrap:wrap;gap:.45rem .8rem;margin-top:.7rem;padding:.65rem .75rem;border:1px solid #dce0e5;border-radius:.65rem;background:#fafbf9;text-align:left;color:#1b2649;font:500 .8rem/1.35 DM,system-ui,sans-serif}
+.inventory-quantity{display:flex;align-items:center;gap:.5rem;font-size:.76rem;font-weight:700}
+.inventory-quantity .shop-input{width:6.25ch;min-width:4.2rem;max-width:100%;border:1px solid #9fa8b7;padding:.36rem .45rem;border-radius:.3rem;background:#fff;color:#1b2649;font:600 .9rem/1.3 DM,system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.inventory-status{font-size:.76rem;color:#465448;font-variant-numeric:tabular-nums}
+.inventory-actions{flex-basis:100%;display:flex;align-items:center;flex-wrap:wrap;gap:.3rem .75rem}
+.inventory-panel button{min-height:30px;margin:0;padding:.15rem 0;color:#843a3b;font:600 .76rem/1.35 DM,system-ui,sans-serif;cursor:pointer;text-decoration:underline;text-underline-offset:.18em}
+.inventory-panel .inventory-promote{color:#294e46}
+.inventory-panel button:disabled{opacity:.55;cursor:default}
+.inventory-panel [hidden]{display:none}
+.editable-tile{min-width:0}
+.editable-tile.pending-removal .tile{opacity:.5}
+.inventory-panel.pending-removal{border-color:#d9bcba;background:#fff7f5}
+.inventory-panel.pending-removal .inventory-status{color:#843a3b}
+.shop-editing #showroom-inventory,.shop-editing #detail-inventory{width:fit-content;max-width:100%}
+.shop-editing #showroom-inventory{margin:.8rem auto 0;justify-content:center}
+#showroom-inventory .inventory-actions,#detail-inventory .inventory-actions{flex-basis:auto}
+.shop-editing #detail-inventory{margin:.9rem 0 1.2rem}
+.shop-editing .detail-actions,.shop-editing #checkout-note,.shop-editing #checkout-status,.shop-editing #inline-stock-count{display:none}
+.shop-editing .catalogue-add-label{opacity:1}
+@media(max-width:550px){
+  .shop-editing #edit-bar{display:grid;grid-template-columns:1fr auto auto;gap:.24rem .45rem;padding:.5rem .7rem;border-radius:.8rem}
+  #edit-bar>span{grid-column:1/3;max-width:none;align-self:center}
+  #edit-bar #edit-exit{grid-column:3;grid-row:1;justify-self:end;border:0;min-height:32px;min-width:32px}
+  #edit-bar #edit-add{grid-column:1;justify-self:start}
+  #edit-bar #edit-push{grid-column:2/4;justify-self:end}
+  .shop-editing #main{padding-bottom:8.5rem}
+  .shop-editing .inventory-panel{padding:.5rem;gap:.35rem .5rem}
+  .inventory-quantity{flex-wrap:wrap;gap:.25rem}
+  .inventory-panel button{min-height:36px}
+  #showroom-inventory .inventory-actions{justify-content:center}
+}

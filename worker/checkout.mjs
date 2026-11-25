@@ -15,15 +15,15 @@ function forShop(item, mode) {
   const {checkoutHolds = [], ...publicItem} = item;
   const available = Math.max(0, (item.quantity ?? 0) - checkoutHolds.length);
   const demo = mode === 'test';
-  const eligible = mode !== 'off' && item.collection !== 'pre-orders' &&
+  const eligible = !item.archived && mode !== 'off' && item.collection !== 'pre-orders' &&
     (demo ? item.quantity !== 0 : available > 0);
-  if (item.copies) publicItem.copies = item.copies.map((copy, index) => ({
-    ...copy, canBuy: eligible && !copy.sold && copy.cents >= 50 &&
-      (demo || !checkoutHolds.some(h => h.copy === index))
-  }));
-  publicItem.canBuy = eligible && (item.copies ? publicItem.copies.some(c => c.canBuy) : item.cents >= 50);
+  if (item.copies) publicItem.copies = item.copies.map((copy, index) => {
+    const reserved = !copy.sold && !demo && checkoutHolds.some(hold => hold.copy === index);
+    return {...copy, reserved, canBuy:eligible && !copy.sold && !reserved && Number.isSafeInteger(copy.cents) && copy.cents > 0};
+  });
+  publicItem.canBuy = eligible && (item.copies ? publicItem.copies.some(c => c.canBuy) : Number.isSafeInteger(item.cents) && item.cents > 0);
   publicItem.checkoutMode = mode;
-  if (mode === 'live' && available === 0 && checkoutHolds.length) publicItem.reserved = true;
+  publicItem.reserved = !demo && available === 0 && checkoutHolds.length > 0;
   if (Number.isInteger(item.quantity) && !demo) publicItem.quantity = available;
   return publicItem;
 }
@@ -119,20 +119,20 @@ function squareLink(env, link) {
 
 async function prepareQuote(env, initial, request, body, origin) {
   const lines = checkoutLines(body);
-  const {attempt, started} = body;
+  const {attempt} = body;
   let quote = await getCheckoutPart(env, attempt, 'quote');
   if (!quote) {
+    if (!Number.isSafeInteger(body.started) || Math.abs(Date.now()/1000 - body.started) > 600) reject(400, 'Start a new checkout.');
     let {items} = await getCatalogue(env, initial);
-    const due = items.filter(item => lines.some(line => line.itemId === item.id) && item.checkoutHolds?.some(hold => hold.provider === 'square' && hold.expires <= Date.now()/1000));
-    if (checkoutMode(env) === 'live' && due.length) {
-      for (const item of due) await refreshReservations(env, initial, item);
+    const requestedIds = new Set(lines.map(line => line.itemId));
+    if (checkoutMode(env) === 'live' && await refreshReservations(env, initial, items.filter(item => requestedIds.has(item.id)))) {
       ({items} = await getCatalogue(env, initial));
     }
     const priced = priceOrder(items, lines, checkoutMode(env));
     const wallet = checkoutMode(env) === 'live' ? await currentPass(request, env) : null;
     const hash = body.lines ? '#cart' : '#item/' + encodeURIComponent(lines[0].itemId);
     quote = await saveCheckoutPart(env, attempt, 'quote', {
-      attempt, lines, location:env.SQUARE_LOCATION_ID, expires:started + 45*60,
+      attempt, lines, location:env.SQUARE_LOCATION_ID, expires:Math.floor(Date.now()/1000) + 45*60,
       subtotal:priced.reduce((sum, line) => sum + line.cents * line.quantity, 0),
       shipping:Number(env.SQUARE_SHIPPING_CENTS), pass:wallet?.id || null,
       returnUrl:origin + '/shop/?checkout=' + attempt + '&attempt=' + attempt + hash,
@@ -163,7 +163,8 @@ async function reserveSquareStock(env, initial, quote, link) {
   await updateStock(env, initial, async rows => {
     // Recheck inside the conditional catalogue update. A concurrent cancel or
     // settlement must not be followed by recreating the same reservation.
-    if (await getCheckoutPart(env, quote.attempt, 'closed')) reject(409, 'That checkout has ended.');
+    if (await getCheckoutPart(env, quote.attempt, 'closed') || await getCheckoutPart(env, quote.attempt, 'stop'))
+      reject(409, 'That checkout has ended.');
     if (rows.some(item => item.checkoutHolds?.some(h => h.provider === 'square' && h.session === link.orderId))) return false;
     for (const line of priceOrder(rows, quote.lines, 'live')) {
       const holds = line.item.checkoutHolds ||= [];
@@ -177,9 +178,9 @@ async function reserveSquareStock(env, initial, quote, link) {
 }
 
 async function startCheckout(env, initial, body, origin, request) {
-  if (!Number.isSafeInteger(body.started) || Math.abs(Date.now()/1000 - body.started) > 600) reject(400, 'Start a new checkout.');
   const quote = await prepareQuote(env, initial, request, body, origin);
-  if (await getCheckoutPart(env, quote.attempt, 'closed')) reject(409, 'That checkout has ended.');
+  if (await getCheckoutPart(env, quote.attempt, 'closed') || await getCheckoutPart(env, quote.attempt, 'stop'))
+    reject(409, 'That checkout has ended.');
   if (quote.expires <= Date.now()/1000) reject(409, 'That checkout has expired. Start a new checkout.');
   const link = await getOrCreateLink(env, quote);
   if (checkoutMode(env) === 'live') {
@@ -201,7 +202,11 @@ async function startCheckout(env, initial, body, origin, request) {
     await settleSquareStock(env, initial, quote, link, closed.status);
     reject(409, 'That checkout has ended.');
   }
-  return json({url:link.url});
+  if (await getCheckoutPart(env, quote.attempt, 'stop')) {
+    await reconcileCheckout(env, initial, quote, link, true);
+    reject(409, 'That checkout has ended.');
+  }
+  return json({attempt:quote.attempt, url:link.url});
 }
 
 function validateOrder(quote, link, order) {
@@ -276,28 +281,71 @@ async function reconcileCheckout(env, initial, quote, link, cancel = false, know
       await recordReward(env, metadata, 'subtotal', quote.subtotal);
       if (refunded) await recordReward(env, metadata, 'refund', Math.min(refunded, quote.subtotal));
     }
-    return status;
+    return {status};
   }
   if (order.state === 'CANCELED' && payments.every(p => ['CANCELED','FAILED'].includes(p.status))) {
     await settleSquareStock(env, initial, quote, link, 'expired');
-    return 'expired';
+    return {status:'expired'};
   }
-  return 'pending';
+  const payable = ['OPEN','DRAFT'].includes(order.state) && payments.every(p => ['CANCELED','FAILED'].includes(p.status));
+  return {status:'pending', payable};
 }
 
 async function checkoutState(env, initial, attempt, cancel) {
-  const quote = await getCheckoutPart(env, attempt, 'quote');
-  const link = await getCheckoutPart(env, attempt, 'link');
-  if (!quote || !link) {
-    if (cancel) return 'closed';
-    reject(404, 'Order not found.');
+  let [quote, link, stopped] = await Promise.all(['quote','link','stop'].map(part => getCheckoutPart(env, attempt, part)));
+  if (!link) {
+    if (!cancel && !stopped) {
+      if (!quote) reject(404, 'Order not found.');
+      if (quote.expires > Date.now()/1000) return {status:'pending', preparing:true};
+    }
+    // Stop a worker already creating this attempt from subsequently handing
+    // out a link. Keep this intent separate from the provider's payment result.
+    if (!stopped) stopped = await saveCheckoutPart(env, attempt, 'stop', {requested:true});
+    link = await getCheckoutPart(env, attempt, 'link');
+    if (!link) return {status:'expired'};
+    quote ||= await getCheckoutPart(env, attempt, 'quote');
   }
-  return reconcileCheckout(env, initial, quote, link, cancel);
+  if (!quote) reject(503, 'Order details are temporarily unavailable.');
+  const expired = quote.expires <= Date.now()/1000;
+  const shouldCancel = Boolean(cancel || stopped || expired);
+  const {status, payable} = await reconcileCheckout(env, initial, quote, link, shouldCancel);
+  if (!payable || shouldCancel) return {status};
+  if (checkoutMode(env) === 'live') {
+    // A link can already exist while a competing request is still trying to
+    // reserve the stock. Only resume if every quoted unit is held for this link.
+    const {items} = await getCatalogue(env, initial);
+    const held = new Map();
+    for (const item of items) {
+      for (const hold of item.checkoutHolds || []) {
+        if (hold.provider !== 'square' || hold.session !== link.orderId || hold.attempt !== attempt) continue;
+        const key = JSON.stringify([item.id, hold.copy, hold.cents]);
+        held.set(key, (held.get(key) || 0) + 1);
+      }
+    }
+    if (!quote.lines.every(line => held.get(JSON.stringify([line.itemId, line.copy, line.expectedCents])) === line.quantity))
+      return {status};
+  }
+  return {status, url:link.url};
 }
 
-async function refreshReservations(env, initial, item) {
-  const due = (item?.checkoutHolds || []).filter(h => h.provider === 'square' && h.expires <= Date.now()/1000);
-  for (const attempt of [...new Set(due.map(h => h.attempt))].slice(0,8)) await checkoutState(env, initial, attempt, true);
+async function refreshReservations(env, initial, items) {
+  const now = Math.floor(Date.now()/1000);
+  const due = new Set();
+  for (const item of items) {
+    for (const hold of item.checkoutHolds || []) {
+      if (hold.provider === 'square' && hold.expires <= now && attemptId.test(hold.attempt)) due.add(hold.attempt);
+    }
+  }
+  if (!due.size) return false;
+  const attempts = [...due];
+  // Rotate bounded work across all due orders. Pending payments and provider
+  // errors must keep their own stock held without starving unrelated orders.
+  const offset = attempts.length > 8 ? (Math.floor(now / 30) * 8) % attempts.length : 0;
+  const batch = attempts.slice(offset).concat(attempts.slice(0, offset)).slice(0, 8);
+  for (let i = 0; i < batch.length; i += 2) {
+    await Promise.allSettled(batch.slice(i, i + 2).map(attempt => checkoutState(env, initial, attempt, true)));
+  }
+  return true;
 }
 
 async function squareWebhook(request, env, initial) {
@@ -338,6 +386,6 @@ async function checkoutRoute(request, env, initial, url) {
   const attempt = url.pathname === '/api/checkout/status' ? body.session : body.attempt;
   if (typeof attempt !== 'string' || !attemptId.test(attempt)) reject(400, 'Invalid checkout reference.');
   if (url.pathname === '/api/checkout') return startCheckout(env, initial, body, origin, request);
-  const status = await checkoutState(env, initial, attempt, url.pathname === '/api/checkout/cancel');
-  return json({status, attempt});
+  const result = await checkoutState(env, initial, attempt, url.pathname === '/api/checkout/cancel');
+  return json({...result, attempt});
 }

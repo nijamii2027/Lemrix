@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {createServer, request as httpRequest} from 'node:http';
 import {once} from 'node:events';
+import {runInNewContext} from 'node:vm';
 import {createGateway} from '../api/gateway.mjs';
 
 // Only the loopback HTTP transport is real. Application, storage, and runtime
@@ -105,6 +106,51 @@ try {
       assert.equal(calls.at(-1).env.REQUIRE_STORED_CATALOGUE, true);
       assert.equal(configCalls.at(-1).storage, bucket);
       privateResponse(result);
+    }
+  });
+
+  await test('Serves fresh equivalent script and JSON catalogue views from stored stock', async () => {
+    const published = [
+      {id:'first-light', cents:1150, quantity:2},
+      {id:'preview', cents:1150, quantity:2, collection:'pre-orders'},
+      {id:'unknown', cents:1150, quantity:null},
+      {id:'sold', cents:1150, quantity:0},
+      {id:'held', cents:1150, quantity:1, checkoutHolds:[{provider:'square', expires:Math.floor(Date.now()/1000)+600}]},
+      {id:'archived', cents:1150, quantity:1, archived:true},
+    ];
+    const storage = {async get(key) {
+      if (key === 'store/v1/catalogue.json') return {etag:'1',json:async()=>structuredClone(published)};
+      return null;
+    }};
+    const config = {SQUARE_ACCESS_TOKEN:'fixture', SQUARE_WEBHOOK_SIGNATURE_KEY:'fixture', SQUARE_LOCATION_ID:'fixture', SQUARE_SHIPPING_CENTS:'0'};
+    const path = '/api/gateway?resource=catalogue';
+    for (const [mode, env] of [['live',config], ['test',{...config,SQUARE_ENVIRONMENT:'sandbox'}], ['off',{}]]) {
+      gateway = createGateway({bucket:storage,env,configLoader:async()=>({})});
+      const json = await call(path, {headers:{Accept:'application/json'}});
+      const script = await call(path, {headers:{Accept:'*/*'}});
+      for (const response of [json,script]) {
+        assert.equal(response.status,200);
+        assert.equal(response.headers.vary,'Accept');
+        privateResponse(response);
+      }
+      assert.match(json.headers['content-type'],/^application\/json/);
+      assert.match(script.headers['content-type'],/^application\/javascript/);
+      const rows = json.json();
+      assert.deepEqual(JSON.parse(runInNewContext(script.text+'\nJSON.stringify(products)')),rows);
+      assert.deepEqual(rows.map(row=>row.id),['first-light','preview','unknown','sold','held']);
+      assert.ok(rows.every(row=>row.checkoutMode===mode && !('checkoutHolds' in row)));
+      assert.deepEqual(rows.map(row=>row.canBuy),[mode!=='off',false,mode==='test',false,mode==='test']);
+      assert.equal(rows[4].quantity,mode==='test' ? 1 : 0);
+      assert.equal(rows[4].reserved,mode!=='test');
+      if (mode !== 'off') {
+        for (const itemId of ['archived','preview','sold']) {
+          const result = await call(api('checkout'),post({
+            itemId,copy:null,expectedCents:1150,attempt:crypto.randomUUID(),started:Math.floor(Date.now()/1000),
+          }));
+          assert.equal(result.status,409);
+          assert.match(result.json().error,/unavailable/);
+        }
+      }
     }
   });
 

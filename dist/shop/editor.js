@@ -22,22 +22,38 @@
     authenticated = Boolean(account);
     if (authenticated) expiry = setTimeout(()=>setAccount(null),Math.max(0,account.expires-Date.now()));
     else {
-      active=false; bar.hidden=true; document.body.classList.remove('shop-editing'); drawer.close();
+      staged.clear(); originals=[]; active=false; bar.hidden=true; document.body.classList.remove('shop-editing'); drawer.close();
       if (published.length) paint();
     }
     window.dispatchEvent(new Event('shop-account-change'));
   }
+  const addButton=document.createElement('button');
+  addButton.type='button';
+  addButton.id='edit-add';
+  addButton.textContent='Add product';
+  addButton.onclick=()=>openEditor();
+  el('edit-push').before(addButton);
+  el('edit-push').textContent='Publish changes';
   function updateBar(message) {
     const count = staged.size;
-    const invalid=[...staged.values()].find(d=>d.errors?.size);
+    const drafts=[...staged.values()];
+    const removed=drafts.filter(d=>d.remove).length;
+    const invalid=drafts.find(d=>!d.remove && d.errors.size);
     const issue=invalid?(invalid.row.name||'Untitled product')+' · '+invalid.errors.values().next().value:'';
-    const text=message || issue || (count ? count+' product'+(count===1?'':'s')+' staged' : 'Browse to a product to edit');
+    let summary=count ? count+' product'+(count===1?'':'s')+' staged' : 'No unpublished changes';
+    if(removed)summary+=' · '+removed+' to remove';
+    const text=message || issue || summary;
+    addButton.disabled=busy;
     if(el('edit-count').textContent!==text)el('edit-count').textContent=text;
     el('edit-push').disabled=busy || !count || !!invalid;
     el('edit-exit').disabled=busy;
   }
   function paint() {
-    const items=structuredClone(published);
+    const items=active ? originals.map(original=>{
+      const publicItem=published.find(p=>p.id===original.id);
+      // The admin edits on-hand units. Public counts can already exclude holds.
+      return {...structuredClone(publicItem),...structuredClone(original)};
+    }) : structuredClone(published);
     if (active) for (const [id, draft] of staged) {
       const index=items.findIndex(p=>p.id===id);
       const row={...items[index],...draft.row};
@@ -67,6 +83,27 @@
     get authenticated(){return authenticated;},
     get active(){return authenticated && active;},
     addProduct:()=>openEditor(),
+    refreshPublished(items){if(!active)published=structuredClone(items);},
+    decorateTile(item,link) {
+      if(!active || !authenticated)return link;
+      const format=link.querySelector('.tile-type');
+      if(format && ![item.card?.set,item.card?.cardNumber,item.card?.language].some(Boolean))format.textContent=item.format;
+      const tile=document.createElement('article');
+      tile.className='editable-tile';
+      tile.append(link,inline.inventoryPanel(item,'catalogue'));
+      if(read(item.id).remove)tile.classList.add('pending-removal');
+      return tile;
+    },
+    renderShowroom(item) {
+      const old=el('showroom-inventory');
+      el('featured-detail').firstChild.textContent=active && authenticated?'Edit details ':'View item ';
+      if(!active || !authenticated){old?.remove();return;}
+      el('featured-format').textContent=item.format;
+      const panel=inline.inventoryPanel(item,'showroom');
+      panel.id='showroom-inventory';
+      if(old)old.replaceWith(panel);
+      else el('featured-detail').after(panel);
+    },
     renderDetail(item,fallback){if(active && authenticated)inline.detail(item,fallback);},
     renderCopy(item,index,face){if(active && authenticated)inline.renderCopy(item,index,face);},
     renderFacts(item){if(active && authenticated)inline.renderFacts(item);},
@@ -106,6 +143,31 @@
   function read(id){
     return staged.get(id) || {row:originals.find(p=>p.id===id)};
   }
+  function draftFor(id){
+    let draft=staged.get(id);
+    if(!draft){
+      const original=originals.find(p=>p.id===id);
+      if(!original)return;
+      draft={row:structuredClone(original),inputs:new Map(),errors:new Map()};
+      staged.set(id,draft);
+    }
+    return draft;
+  }
+  function toggleRemoval(item,view){
+    if(!active || !authenticated || busy)return;
+    const draft=draftFor(item.id);
+    if(!draft)return;
+    if(draft.row.create){
+      staged.delete(item.id);
+      if(location.hash.startsWith('#item/'+item.id))location.hash=el('detail-return').hash || '#catalogue';
+    }else{
+      draft.remove=!draft.remove;
+      if(!draft.remove && !draft.inputs.size)staged.delete(item.id);
+    }
+    paint();updateBar();
+    const panel=document.querySelector('[data-inventory-view="'+view+'"][data-product-id="'+CSS.escape(item.id)+'"]');
+    (panel?.querySelector('.inventory-remove') || addButton).focus({preventScroll:true});
+  }
   function changeValue(row,path,value){
     const [key,index,part]=path.split('.');
     if(key==='card')row.card={...row.card,[index]:value};
@@ -117,13 +179,8 @@
   }
   function write(item,path,raw,value,message){
     if(!active || !authenticated || busy)return;
-    let draft=staged.get(item.id);
-    if(!draft){
-      const base=originals.find(row=>row.id===item.id);
-      if(!base)return;
-      draft={row:structuredClone(base),inputs:new Map(),errors:new Map()};
-      staged.set(item.id,draft);
-    }
+    const draft=draftFor(item.id);
+    if(!draft || draft.remove)return;
     draft.inputs.set(path,raw);
     if(message)draft.errors.set(path,message);else draft.errors.delete(path);
     changeValue(draft.row,path,value);
@@ -132,7 +189,7 @@
     if(item!==draft.row)changeValue(item,path,value);
     updateBar();
   }
-  const inline=window.LemrixInlineEditor({read,write,busy:()=>busy});
+  const inline=window.LemrixInlineEditor({read,write,toggleRemoval,busy:()=>busy});
   function openEditor() {
     if (!authenticated || !active || busy || drawer.open) return;
     form.reset();
@@ -173,12 +230,13 @@
       await desk.save(row,blob=>api('images',{method:'POST',body:blob}));
       if(!authenticated || !active)return;
       staged.set(id,{row,inputs:new Map(),errors:new Map()});
-      dirty=false; drawer.close(); paint(); updateBar();
+      dirty=false; busy=false; drawer.close(); paint(); updateBar();
       if(next) setTimeout(()=>{if(active && authenticated){openEditor();el('stage-next').checked=true;}},0);
     } catch(error){ el('form-status').textContent=error.message; }
     finally {busy=false;controls.forEach(c=>c.disabled=false);el('save').disabled=false;updateBar();}
   };
-  function payload({row}){
+  function payload({row,remove}){
+    if(remove)return {id:row.id,revision:row.revision,remove:true};
     const {id,create,revision,image,backImage,name,description,format,category,notes,availability,collection,card}=row;
     return {id,create,revision,image,backImage,name,description,format,category,notes,availability,collection,card,
       quantity:row.quantity??null,prices:row.copies?.map(c=>c.cents) || [row.cents],
@@ -186,15 +244,16 @@
       wear:row.copies?.map(c=>({front:c.front[0],back:c.back[0]}))};
   }
   el('edit-push').onclick=async()=>{
-    if (!authenticated || !active || busy || !staged.size || [...staged.values()].some(d=>d.errors.size)) return;
+    if (!authenticated || !active || busy || !staged.size || [...staged.values()].some(d=>!d.remove && d.errors.size)) return;
     busy=true; updateBar('Publishing…');
-    el('detail').querySelectorAll('.shop-input').forEach(input=>input.disabled=true);
+    const enabled=[...document.querySelectorAll('.shop-input:enabled,.inventory-panel button:enabled')];
+    enabled.forEach(input=>input.disabled=true);
     try {
       await api('items/push',post({changes:[...staged.values()].map(payload)}));
       staged.clear();
       sessionStorage.setItem('lemrix.shop.pushed','1');
       location.reload();
-    } catch(error) {busy=false;el('detail').querySelectorAll('.shop-input').forEach(input=>input.disabled=false);updateBar(error.message);}
+    } catch(error) {busy=false;enabled.forEach(input=>input.disabled=false);updateBar(error.message);}
   };
   if (sessionStorage.getItem('lemrix.shop.pushed')) {
     sessionStorage.removeItem('lemrix.shop.pushed');

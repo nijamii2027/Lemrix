@@ -10,16 +10,26 @@ window.LemrixCollection=(()=>{
     location.hash=route+q.toString();
   };
   const setValue=(q,k,v)=>v?q.set(k,v):q.delete(k);
-  const usable=item=>Number.isInteger(item.quantity)&&item.quantity>0 && item.collection!=='pre-orders';
+  function stockCount(item) {
+    if (item.archived || item.reserved || item.collection === 'pre-orders' ||
+        !Number.isInteger(item.quantity) || item.quantity <= 0) return 0;
+    if (!item.copies) return item.quantity;
+    const availableCopies = item.copies.filter(copy => !copy.sold && !copy.reserved);
+    return Math.min(item.quantity, availableCopies.length);
+  }
   const kind=item=>item.card?.productType || (item.category==='Singles'?'card':item.category==='Packs'?'pack':'accessory');
   const badge=item=>[item.card?.grader,item.card?.grade].filter(Boolean).join(' ');
-  const amount=item=>item.copies?.length?Math.min(...item.copies.map(c=>c.cents)):item.cents;
+  function amount(item) {
+    if (!item.copies?.length) return item.cents;
+    const available=item.copies.filter(copy=>copy.canBuy);
+    return Math.min(...(available.length?available:item.copies).map(copy=>copy.cents));
+  }
   const eq=(a,b)=>norm(a)===norm(b);
   let era='',catalogue=[],current=null,front='',back='',side='front';
   function apply(items){
     const q=params(),type=q.get('type'),lang=q.get('language'),set=q.get('set'),series=q.get('era'),sort=q.get('sort');
     const out=items.filter(item=>(!type||kind(item)===type)&&(!lang||eq(item.card?.language,lang))&&
-      (!set||eq(item.card?.set,set))&&(!series||eq(item.card?.series,series))&&(!q.has('stock')||usable(item)));
+      (!set||eq(item.card?.set,set))&&(!series||eq(item.card?.series,series))&&(!q.has('stock')||stockCount(item)>0));
     if(sort==='low'||sort==='high')out.sort((a,b)=>(amount(a)-amount(b))*(sort==='high'?-1:1));
     else if(sort==='name')out.sort((a,b)=>a.name.localeCompare(b.name));
     else if(sort==='new')out.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
@@ -71,7 +81,7 @@ window.LemrixCollection=(()=>{
       const key=norm(c.language)+'/'+norm(c.set);
       let entry=lookup.get(key);
       if(!entry){entry={name:c.set,language:c.language||'',series:c.series||'Other sets',stock:0};lookup.set(key,entry);catalogue.push(entry);}
-      if(usable(item))entry.stock+=item.quantity;
+      entry.stock+=stockCount(item);
     }
     id('set-query').value='';era=catalogue.find(s=>s.stock)?.series||era||catalogue[0]?.series||'';
     drawSets();dialog.showModal();id('set-query').focus();
@@ -113,5 +123,5 @@ window.LemrixCollection=(()=>{
     if(zoom.getAttribute('aria-pressed')!=='true')return;
     const r=zoom.getBoundingClientRect();zoom.style.setProperty('--zoom-point',Math.max(0,Math.min(100,(e.clientX-r.left)/r.width*100))+'% '+Math.max(0,Math.min(100,(e.clientY-r.top)/r.height*100))+'%');
   });
-  return {apply,sync,inspect,badge,selectedSet:()=>params().get('set')};
+  return {apply,sync,inspect,badge,stockCount,amount,selectedSet:()=>params().get('set')};
 })();

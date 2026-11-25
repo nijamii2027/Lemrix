@@ -7,7 +7,7 @@ window.LemrixCart = (() => {
   const find = id => products.find(item => item.id === id);
   const matches = (line,id,copy) => line.itemId === id && line.copy === copy;
   const linesKey = lines => JSON.stringify(lines);
-  let lines = [], pending = null, busy = false;
+  let lines = [], busy = false;
   function read() {
     try {
       const stored = localStorage.getItem(key);
@@ -24,13 +24,42 @@ window.LemrixCart = (() => {
   }
   read();
   const count = () => lines.reduce((n,l) => n+l.quantity,0);
-  const resolve = line => {
-    const item=find(line.itemId);
-    const listing=item && (item.copies ? item.copies[line.copy] : line.copy===null ? item : null);
-    return {item,listing};
-  };
+  // Use the same public Square eligibility for a specific listing everywhere.
+  function availability(item, copy) {
+    const listing = item && (item.copies ? item.copies[copy] : copy === null ? item : null);
+    let reason = '';
+    if (!listing) reason = 'Listing no longer available';
+    else if (item.collection === 'pre-orders') reason = 'Pre-order preview';
+    else if (listing.sold) reason = 'Sold out';
+    else if (listing.reserved || item.reserved) reason = 'Temporarily reserved';
+    else if (item.quantity === 0) reason = 'Sold out';
+    else if (!item.checkoutMode || (item.checkoutMode === 'live' && !Number.isInteger(item.quantity))) reason = 'Preview only';
+    else if (item.checkoutMode === 'off') reason = 'Online checkout unavailable';
+    else if (!listing.canBuy) reason = 'Unavailable to order';
+    const max = reason ? 0 : item.copies ? 1 : Math.min(99, item.quantity ?? 99);
+    return {item, listing, reason, max};
+  }
+  function cartState() {
+    const quantities = new Map();
+    const rows = lines.map(line => {
+      const row = availability(find(line.itemId), line.copy);
+      if (!row.reason) quantities.set(line.itemId, (quantities.get(line.itemId) || 0) + line.quantity);
+      return {...row, line};
+    });
+    const order = [];
+    let subtotal = 0;
+    for (const row of rows) {
+      const {item, listing, line} = row;
+      if (!row.reason && item.copies && line.quantity !== 1) row.reason = 'Only one of this copy is available';
+      if (!row.reason && (line.quantity > row.max || (item.checkoutMode === 'live' && quantities.get(item.id) > item.quantity)))
+        row.reason = item.copies ? 'Choose up to '+item.quantity+' available cop'+(item.quantity===1?'y':'ies') : 'Only '+row.max+' available. Reduce the quantity to check out.';
+      if (row.reason) continue;
+      subtotal += listing.cents * line.quantity;
+      order.push({...line, expectedCents:listing.cents});
+    }
+    return {rows, order, subtotal};
+  }
   function commit() {
-    pending=null;
     try { localStorage.setItem(key,linesKey(lines)); } catch {}
     refresh();
   }
@@ -42,6 +71,7 @@ window.LemrixCart = (() => {
   function contains(id,copy) { return lines.some(l => matches(l,id,copy)); }
   function add(id,copy) {
     if (contains(id,copy)) { location.hash='cart'; return; }
+    if (availability(find(id),copy).reason) return;
     lines.push({itemId:id,copy,quantity:1});
     commit();
   }
@@ -58,13 +88,9 @@ window.LemrixCart = (() => {
   }
   function render() {
     const fragment=document.createDocumentFragment();
-    let subtotal=0, ready=lines.length>0, hasPreview=false;
-    for (const [index,line] of lines.entries()) {
-      const {item,listing}=resolve(line);
-      if (listing) subtotal+=listing.cents*line.quantity;
-      const unavailable=!listing?.canBuy || (item.checkoutMode==='live' && line.quantity>item.quantity);
-      ready &&= !unavailable;
-      hasPreview ||= unavailable;
+    const {rows, order, subtotal}=cartState();
+    const mixed=order.length>0 && order.length<rows.length;
+    for (const [index,{line,item,listing,reason,max}] of rows.entries()) {
       const row=document.createElement('li');
       row.dataset.index=index;
       const title=item?.name || 'Unavailable item';
@@ -77,22 +103,16 @@ window.LemrixCart = (() => {
       const info=document.createElement('div');
       const meta=listing && item.copies ? 'Copy '+String.fromCharCode(65+line.copy)+' · '+listing.condition : item?.format;
       info.append(link,text('p',meta||'Removed from the catalogue.'));
-      if (unavailable) {
-        const reason = item?.collection === 'pre-orders' ? 'Pre-order preview'
-          : item?.reserved ? 'Temporarily reserved'
-          : !item?.checkoutMode || item.checkoutMode === 'off' ? 'Checkout unavailable'
-          : 'Unavailable to order';
-        info.append(text('small', reason));
-      }
+      if (reason) info.append(text('small', reason));
       const edit=document.createElement('div'); edit.className='cart-controls';
-      if(listing && line.copy===null){
+      if(listing && line.copy===null && max>0){
         const group=document.createElement('div'); group.className='cart-stepper';
         const minus=control('−','less','Decrease '+title+' quantity');
         const plus=control('+','more','Increase '+title+' quantity');
         minus.disabled=busy || line.quantity===1;
-        plus.disabled=busy || line.quantity>=Math.min(99,item.quantity??99);
+        plus.disabled=busy || line.quantity>=max;
         group.append(minus,text('span',line.quantity),plus); edit.append(group);
-      }
+      } else if (line.quantity>1) edit.append(text('span','Quantity '+line.quantity));
       const remove=control('Remove','remove','Remove '+title+' from cart');
       remove.disabled=busy; edit.append(remove);
       info.append(edit);
@@ -103,9 +123,14 @@ window.LemrixCart = (() => {
     byId('cart-empty').hidden=!!lines.length;
     byId('cart-summary').hidden=!lines.length;
     byId('cart-total').textContent=money(subtotal);
-    byId('cart-checkout').disabled=busy || !ready;
-    byId('cart-checkout').textContent=busy?'Opening checkout…':products.some(i=>i.checkoutMode==='test')?'Test checkout':'Checkout';
-    byId('cart-note').textContent=products.some(item => item.checkoutMode === 'off') ? 'Online checkout is being set up.' : hasPreview?'Checkout is available for in-stock items only.':'Ships within Australia. Shipping is shown at Square checkout.';
+    byId('cart-subtotal-label').textContent=order.length===rows.length?'Subtotal':'Checkout subtotal';
+    byId('cart-checkout').disabled=busy || checkoutInProgress() || !order.length || order.length>50;
+    byId('cart-checkout').textContent=busy?'Opening checkout…':mixed?'Checkout available items':order.length && find(order[0].itemId)?.checkoutMode==='test'?'Test checkout':'Checkout';
+    byId('cart-note').textContent=order.length>50?'Choose up to 50 listings per checkout.':
+      mixed?'Only available items are included in the subtotal and checkout. Other items stay in your cart.':
+      order.length?'Ships within Australia. Shipping is shown at Square checkout.':
+      rows.length===1?(rows[0].reason==='Pre-order preview'?'This pre-order preview is not open for purchase.':rows[0].reason.replace(/\.?$/,'.')):
+      'Each unavailable item is marked below its name.';
   }
   function open() {
     byId('cart').hidden=false; render();
@@ -117,25 +142,24 @@ window.LemrixCart = (() => {
     const b=e.target.closest('button[data-action]'); if (!b || busy) return;
     const index=Number(b.closest('li').dataset.index), line=lines[index]; if(!line)return;
     if(b.dataset.action==='remove') lines.splice(index,1);
-    else line.quantity+=b.dataset.action==='more'?1:-1;
+    else {
+      const {max}=availability(find(line.itemId),line.copy);
+      const next=line.quantity+(b.dataset.action==='more'?1:-1);
+      if (!max || next<1 || (next>max && next>=line.quantity)) return;
+      line.quantity=next;
+    }
     const action=b.dataset.action;
     message(''); commit();
     const row=byId('cart-lines').children[Math.min(index,lines.length-1)];
     (row?.querySelector('[data-action="'+action+'"]:not(:disabled)')||row?.querySelector('button:not(:disabled)')||byId('cart-continue')).focus({preventScroll:true});
   });
   byId('cart-checkout').addEventListener('click',async()=>{
-    if (busy || !lines.length) return;
-    const order=lines.map(l=>({...l, expectedCents:resolve(l).listing?.cents}));
-    if(!order.every(l=>resolve(l).listing?.canBuy)) return;
-    const signature=linesKey(order);
-    if(!pending || pending.signature!==signature || Date.now()/1000-pending.started>540)
-      pending={attempt:crypto.randomUUID(),started:Math.floor(Date.now()/1000),signature};
-    const request=pending;
+    if (busy || checkoutInProgress()) return;
+    const {order}=cartState();
+    if (!order.length || order.length>50) return;
     busy=true; message(''); render();
     try {
-      const result=await checkoutPost('',{attempt:request.attempt,started:request.started,lines:order});
-      try { sessionStorage.setItem('cart-order-'+request.attempt,linesKey(order)); } catch {}
-      location.assign(result.url);
+      await startCustomerCheckout({lines:order});
     } catch(error){ message(error.message); }
     finally { busy=false; render(); }
   });
@@ -144,6 +168,7 @@ window.LemrixCart = (() => {
     try {
       const order=JSON.parse(sessionStorage.getItem('cart-order-'+attempt)||'[]');
       if(!order.length)return;
+      read();
       for(const paid of order) {
         const l=lines.find(l=>matches(l,paid.itemId,paid.copy));
         if(l) l.quantity-=paid.quantity;
@@ -156,5 +181,5 @@ window.LemrixCart = (() => {
   window.addEventListener('storage',e=>{
     if(e.key===key || e.key===null){read();refresh();window.dispatchEvent(new Event('lemrix-cart-change'));}
   });
-  return {add,contains,open,refresh,complete,message};
+  return {add,contains,open,refresh,complete,message,availability};
 })();
