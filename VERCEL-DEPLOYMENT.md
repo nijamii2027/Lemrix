@@ -65,5 +65,3 @@ Verify the dynamic catalogue uses current private-store data and that unauthenti
 ### Customer sign-in
 
 Set `GOOGLE_CLIENT_ID` to the Google OAuth **Web application** client ID and allow each storefront’s exact HTTPS origin in Google Cloud. Set `APPLE_CLIENT_ID` to the Apple **Services ID**, associate it with the Sign in with Apple App ID, register each storefront domain, and allow its exact return URL, such as `https://lemrix.com.au/shop/`. Each configured provider appears in the shop account dialog. Ordinary checkout also works for guests.
-
-To record authenticated customers in an existing Supabase Auth project, set both `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` on the server. Enable the corresponding Google and Apple providers in that same project for the same client IDs and leave nonce checking enabled. The server validates each provider ID token, exchanges it with Supabase, checks the matching provider identity, and issues the existing HTTP-only Lemrix session. Collector accounts keep their provider and stable subject IDs. No database migration or service-role key is required for customer sign-in.

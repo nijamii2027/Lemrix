@@ -53,27 +53,6 @@ async function verifyCustomerToken(token, config, client, nonce) {
   if (!await crypto.subtle.verify(alg,key,signature,message)) invalid();
   return claims;
 }
-function supabaseProject(env) {
-  if (!env.SUPABASE_URL && !env.SUPABASE_PUBLISHABLE_KEY) return null;
-  const url=URL.canParse(env.SUPABASE_URL) && new URL(env.SUPABASE_URL);
-  if (!url || url.protocol!=='https:' || url.username || url.password || url.pathname!=='/' || url.search || url.hash || !env.SUPABASE_PUBLISHABLE_KEY)
-    reject(503,'Customer sign-in configuration is incomplete.');
-  return url.origin;
-}
-async function confirmSupabaseIdentity(project,env,provider,credential,rawNonce,subject) {
-  const response=await fetch(project+'/auth/v1/token?grant_type=id_token', {
-    method:'POST', redirect:'error',
-    headers:{apikey:env.SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'},
-    body:JSON.stringify({provider,id_token:credential,nonce:rawNonce})
-  });
-  if (!response.ok) reject(response.status>=500?503:401,'The account sign-in service could not confirm this login.');
-  const {user}=await response.json();
-  // Match the verified provider subject. E-mail and client-editable metadata
-  // alone are insufficient to link an existing collector account.
-  if (typeof user?.id!=='string' || !user.identities?.some(i=>i.provider===provider && i.identity_data?.sub===subject))
-    reject(401,'The sign-in service returned an unexpected identity.');
-  return user.id;
-}
 async function sessionPath(raw) {
   return customerPrefix+'sessions/'+hex(await crypto.subtle.digest('SHA-256',encoder.encode(raw)));
 }
@@ -98,7 +77,6 @@ async function customerRoute(request,env,url) {
       if (env[config.setting]) clients[provider]=env[config.setting];
     }
     if (!Object.keys(clients).length) reject(503,'Customer sign-in is awaiting activation.');
-    supabaseProject(env);
     const rawNonce=randomId()+randomId();
     const nonce=hex(await crypto.subtle.digest('SHA-256',encoder.encode(rawNonce)));
     return json({client:clients.google,clients,nonce},200,{'Set-Cookie':shopCookie(challengeCookie,rawNonce,600)});
@@ -106,17 +84,14 @@ async function customerRoute(request,env,url) {
   const config=Object.hasOwn(identityProviders,action) && identityProviders[action];
   if(config && method==='POST') {
     if (!env[config.setting]) reject(503,config.name+' sign-in is awaiting activation.');
-    const project=supabaseProject(env);
     const rawNonce=readCookie(request,challengeCookie);
     const body=await readForm(request);
     if (!/^[a-f0-9]{64}$/.test(rawNonce || '') || !isText(body.credential,16000)) reject(401,'Reopen sign-in and try again.');
     const nonce=hex(await crypto.subtle.digest('SHA-256',encoder.encode(rawNonce)));
     const claims=await verifyCustomerToken(body.credential,config,env[config.setting],nonce);
-    let supabaseId;
-    if (project) supabaseId=await confirmSupabaseIdentity(project,env,action,body.credential,rawNonce,claims.sub);
     const user={key:action+'/'+claims.sub,name:(typeof claims.name==='string' && claims.name.trim() || claims.email).slice(0,200),email:claims.email};
     const profileKey=customerPrefix+'profiles/'+(action==='google'?'':action+'/')+claims.sub;
-    await env.BUCKET.put(profileKey,JSON.stringify(supabaseId?{...user,supabaseId}:user));
+    await env.BUCKET.put(profileKey,JSON.stringify(user));
     const token=randomId()+randomId();
     await env.BUCKET.put(await sessionPath(token),JSON.stringify({expires:Date.now()+customerLifetime*1000,user}));
     if(sessionKey) await env.BUCKET.delete(sessionKey);
