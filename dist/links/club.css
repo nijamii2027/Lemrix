@@ -1,0 +1,96 @@
+@font-face{font-family:Round;src:url(art/fredoka-700.woff2)}
+@font-face{font-family:DM;src:url(art/dm-sans-500.woff2);font-weight:500}
+@font-face{font-family:DM;src:url(art/dm-sans-700.woff2);font-weight:700}
+:root{--ink:#202648;--cream:#fbf5e7;--blue:#364ccc;color:var(--ink);background:var(--cream);font:500 16px/1.4 DM,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background-image:radial-gradient(#846d4119 .7px,transparent .9px);background-size:6px 6px}
+a{color:inherit;text-decoration:none}
+svg{width:1.1em;height:1.1em;vertical-align:middle}
+a:focus-visible{outline:3px solid #be431c;outline-offset:4px}
+[hidden]{display:none!important}
+header,main{width:min(1250px,92%);margin:auto}
+header{min-height:85px;display:flex;align-items:center;gap:24px;border-bottom:1px solid #26295155}
+header img{display:block;width:69px}
+.location{display:flex;align-items:center;gap:8px;margin-left:auto;padding-block:8px;font-style:normal;font-size:.9rem;line-height:1.35}
+.location svg{flex:none}
+main{display:grid;grid-template-columns:.97fr 1.03fr;gap:clamp(28px,5vw,75px);align-items:start;padding:30px 0 45px}
+#links-title{font:700 1em/.87 Round,sans-serif;letter-spacing:-.055em;margin:0}
+.feature{position:relative;display:block;isolation:isolate;overflow:hidden;background-color:#ffd78a;background-image:radial-gradient(#f2a54690 1px,transparent 1.3px);background-size:7px 7px;border:2px solid var(--ink);border-radius:20px;padding:24px 27px 26px;box-shadow:0 4px 0 var(--ink)}
+.featured-label{font-size:.72rem;letter-spacing:.11em;font-weight:700;display:flex;gap:6px;align-items:center}
+.featured-label svg{width:18px;height:18px}
+.watch{display:inline-flex;align-items:center;gap:6px;background:var(--ink);color:var(--cream);border-radius:20px;padding:8px 13px;font-weight:700;font-size:.82rem}
+#links-title{font-size:2.15rem;margin:31px 0 16px}
+.list{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row{display:flex;align-items:center;gap:10px;min-height:75px;padding:12px;background:#fffaf0;border:1.4px solid #8e8b92;border-radius:13px;transition:transform .2s,box-shadow .2s,border-color .2s}
+.row:hover,.row:focus-visible{transform:translateY(-3px) rotate(-.6deg);box-shadow:0 3px 0 var(--ink);border-color:var(--ink)}
+.icon{display:grid;place-items:center;flex:none;width:37px;height:38px;border-radius:10px;background:var(--iconbg);border:1px solid #26295144}
+.icon svg{width:21px;height:21px}
+.row strong,.row small{display:block}
+.row strong{font-weight:700;line-height:1.2}
+.row small{font-size:.78rem;line-height:1.3;color:#54536a;margin-top:3px}
+.out{margin-left:auto;align-self:flex-start;color:#646071}
+.out svg{width:12px}
+.pink{--iconbg:#ffbfcc}
+.mint{--iconbg:#b3e3ce}
+.lilac{--iconbg:#cec6ff}
+.peach{--iconbg:#ffb29a}
+.butter{--iconbg:#f4d681}
+.blue{--iconbg:#aacdf6}
+@keyframes deal{from{transform:translateY(20px) rotate(2deg);opacity:0}to{transform:none;opacity:1}}
+@media(prefers-reduced-motion:no-preference){.directory{animation:deal .65s cubic-bezier(.15,.75,.2,1) backwards}
+.directory{animation-delay:.09s}}
+@media(min-width:841px) and (max-width:1080px){.list{grid-template-columns:1fr}}
+@media(max-width:840px){header,main{width:min(94%,640px)}
+header{min-height:64px}
+header img{width:55px}
+main{display:block;padding-top:16px}
+.feature{margin-top:20px}}
+@media(max-width:500px){
+.feature{padding:18px 19px}
+.list{grid-template-columns:1fr}
+.row{min-height:62px;padding:9px 14px}
+.out{align-self:center}
+#links-title{margin-top:25px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+/* One featured stream, with the link directory immediately below. */
+main{display:block;width:min(980px,92%);padding-top:26px}
+.feature{background:#ffdc89;background-image:none;padding:clamp(22px,3.4vw,44px);margin:0}
+.feature h1{position:relative;font:700 clamp(3.4rem,6.4vw,6.25rem)/.87 Round,sans-serif;letter-spacing:-.055em;margin:18px 0 22px;z-index:1;width:max-content}
+/* The art has its own lane alongside the copy. The moving track is exactly
+   the width left over after reserving space for one complete drawing. */
+.feature {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  column-gap: clamp(8px, 1.8vw, 28px);
+}
+.mascot-loop {
+  --runner-width: 44%;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--runner-width) 1fr;
+  pointer-events: none;
+}
+.mascot-loop::before { content: ""; aspect-ratio: 240 / 232; }
+.mascot-path { position: absolute; inset: 0 var(--runner-width) 0 0; }
+.mascot-facing { position: relative; height: 100%; aspect-ratio: 240 / 232; overflow: hidden; }
+.mascot-poster { display: block; width: 100%; height: 100%; }
+.mascot-frames {
+  display: none;
+  position: absolute;
+  top: 0; left: 0;
+  width: 800%; height: 800%; max-width: none;
+}
+.mascot-loop.is-running .mascot-frames { display: block; }
+.mascot-loop.is-running .mascot-poster { visibility: hidden; }
+@media (prefers-reduced-motion: reduce) {
+  .mascot-path { transform: translateX(50%); }
+}
+@media(min-width:841px){.list{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:600px){main{width:94%;padding-top:15px}.feature{padding:23px 18px;min-height:210px}.feature h1{font-size:clamp(2.65rem,9.2vw,3.6rem);margin:19px 0}.mascot-loop{--runner-width:61%}.featured-label{font-size:.68rem}.watch{font-size:.78rem}}
+@media (max-width: 400px) {
+  .feature { grid-template-columns: minmax(0, 1fr); row-gap: 2px; padding-bottom: 12px; }
+  .feature-copy { justify-self: start; }
+  .feature h1 { margin-block: 14px; }
+  .mascot-loop { --runner-width: 44%; width: min(100%, 300px); justify-self: end; }
+}
