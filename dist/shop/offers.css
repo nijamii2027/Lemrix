@@ -1,0 +1,65 @@
+.account-opener{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:40px;padding:0 5px;font:700 .76rem/1.2 DM,Arial,sans-serif;white-space:nowrap}
+.account-glyph{position:relative;display:inline-block;width:16px;height:18px;flex:none}
+.account-glyph:before,.account-glyph:after{position:absolute;content:"";border:1.5px solid currentColor}
+.account-glyph:before{width:6px;height:6px;border-radius:50%;left:4px;top:0}
+.account-glyph:after{left:0;right:0;bottom:0;height:7px;border-radius:9px 9px 2px 2px}
+.detail-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:7px}
+.detail-actions:has(#offer-opener:not([hidden])) .cart-action{background:transparent;color:var(--ink);border-color:var(--line)}
+.detail-actions:has(#offer-opener:not([hidden])) .cart-action:hover{background:#f0f0ec}
+.copy-offer-link,.deal-text{font:700 .81rem/1.4 DM,sans-serif;text-decoration:underline;text-underline-offset:3px;padding:4px 0;min-height:32px}
+.copy-offer-link{margin-top:6px}
+#deal-dialog{width:min(445px,calc(100% - 26px));max-height:min(86svh,790px);padding:clamp(19px,3.1vw,34px);overscroll-behavior:contain;background:#fcfcfa}
+.deal-head,.deal-after{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#deal-heading{font:800 clamp(34px,5vw,51px)/.94 'Barlow Display',DM,sans-serif;text-transform:uppercase;letter-spacing:-.025em;outline:none}
+.deal-close{flex:none;display:grid;place-items:center;width:35px;height:35px;border:1px solid var(--line);border-radius:50%;font:500 24px/1 DM,sans-serif;background:white}
+.deal-intro,.deal-error,#deal-offers>p{font-size:.87rem;line-height:1.45}
+.deal-intro{margin:14px 0 20px;color:#4c5265}
+.deal-error{margin:13px 0 0;color:#942f31}
+.deal-error:empty{display:none}
+#deal-product{display:flex;gap:12px;align-items:center;padding:11px 13px;border-radius:7px;background:#eeeff0;margin:0 0 18px}
+#deal-product img{width:61px;height:69px;object-fit:contain}
+#deal-product strong,#deal-profile h3{font-size:1.04rem;line-height:1.25;font-weight:700;letter-spacing:-.026em}
+#deal-product p{font-size:.77rem;color:var(--muted);line-height:1.45;margin-top:3px}
+#deal-product p:last-child{font-variant-numeric:tabular-nums}
+.deal-form{display:flex;flex-direction:column;align-items:stretch}
+.deal-form label{font-size:.78rem;font-weight:700;margin:0 0 5px}
+.deal-form input{width:100%;min-width:0;font:500 1rem/1.2 DM,sans-serif;border:1px solid #aeb1bc;border-radius:5px;padding:10px 11px;color:var(--ink);background:white}
+.deal-form input[aria-invalid="true"]{border-color:#a73939}
+#deal-auth-form input+label{margin-top:12px}
+.deal-form .action{margin-top:17px}
+.deal-currency{display:flex;align-items:center;border:1px solid #aeb1bc;border-radius:5px;overflow:hidden;background:white}
+.deal-currency span{padding:0 12px;font-size:.82rem;font-weight:700;color:var(--muted);border-right:1px solid var(--line)}
+.deal-currency input{border:0}
+.deal-currency:focus-within{outline:2px solid #2859ba;outline-offset:2px}
+.deal-currency input:focus-visible{outline:0}
+.deal-google{min-height:41px;display:flex;justify-content:center;align-items:center;gap:7px;padding:7px 12px;border:1px solid var(--line);border-radius:99px;background:#fff;font-weight:700;font-size:.82rem;margin-top:7px}
+.deal-google small{font-weight:500;color:var(--muted)}
+.deal-form .deal-text{align-self:center;margin-top:7px}
+.google-profile,.deal-record{display:flex;align-items:center;width:100%;text-align:left;gap:11px;padding:10px;border:1px solid var(--line);border-radius:7px;background:#fff}
+.google-profile:hover,.deal-record:hover{border-color:var(--navy)}
+.google-profile>span:nth-child(2),.deal-record>span{display:grid;gap:3px;min-width:0}
+.google-profile strong,.deal-record strong{font-size:.88rem}
+.google-profile small,.deal-record small{font-size:.72rem;color:var(--muted)}
+.google-avatar{display:grid;place-items:center;height:39px;width:39px;border-radius:50%;background:#d8e2f9;color:var(--navy);font-weight:700}
+.google-profile i,.deal-record b{margin-left:auto}
+#deal-auth-back,#deal-logout{margin-top:12px}
+#deal-profile h3{margin:15px 0 8px}
+#deal-offers{display:grid;gap:5px}
+#deal-offers>p{color:var(--muted)}
+.deal-record img{width:42px;height:45px;object-fit:contain}
+.deal-record b{font-size:.76rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.deal-after{justify-content:flex-start}
+@media(max-width:640px){
+  .account-opener{width:34px;height:42px;padding:0}
+  #account-nav-label{display:none}
+  .detail-buy{flex-wrap:wrap;gap:8px 13px}
+  .detail-actions{max-width:100%;justify-content:flex-start}
+  .detail-actions .action{padding-inline:14px}
+  .deal-record{padding:7px;gap:7px}
+}
+#google-button{display:grid;justify-content:center;min-width:0}#google-status{font-size:.86rem;color:#596276;text-align:center}#google-status:empty,#google-button:empty{display:none}
+
+#google-status:not(:empty),#google-button:not(:empty){margin-top:13px}
+#google-status{line-height:1.45}
+#deal-auth-form .deal-text{margin-top:12px}
+#deal-dialog{max-height:min(86svh,calc(100dvh - 20px),790px)}

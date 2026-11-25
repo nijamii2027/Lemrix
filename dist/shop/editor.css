@@ -1,0 +1,89 @@
+#edit-bar,#edit-drawer{color:#1b2649;font:500 1rem/1.4 DM,system-ui,sans-serif}
+#edit-bar[hidden],#edit-drawer:not([open]),#edit-drawer [hidden]{display:none!important}
+#edit-bar{position:fixed;z-index:25;bottom:max(18px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:.65rem;padding:.55rem .7rem .55rem 1rem;border:1px solid #d7dbe5;border-radius:18px;background:#fff;box-shadow:0 8px 36px #19244a20;width:max-content;max-width:calc(100% - 20px)}
+#edit-bar span{padding-right:.5rem;max-width:min(32vw,30rem)}#edit-bar b,#edit-bar small{display:block}#edit-bar small{font-size:.82rem;color:#525e75}
+#edit-bar button,#edit-drawer button{border:1px solid #ccd1dd;color:inherit;border-radius:999px;background:#fff;padding:.55rem .85rem;font:inherit;font-weight:700;cursor:pointer}
+#edit-bar #edit-push,#edit-drawer #save{background:#1c2855;color:#fff;border-color:#1c2855}#edit-bar button:disabled,#edit-drawer button:disabled{opacity:.45;cursor:default}
+.shop-editing #main{padding-bottom:6rem}
+.shop-input{display:inline-block;max-width:100%;min-width:0;padding:.08em .16em;margin:0;border:1px solid transparent;border-radius:.24rem;background:transparent;color:inherit;font:inherit;letter-spacing:inherit;line-height:inherit;text-align:inherit;text-transform:inherit;vertical-align:baseline}
+.shop-input:hover{background:#f0f2f6;border-color:#d4d9e2}
+.shop-input:focus{background:#fff;outline:2px solid #3453a3;outline-offset:1px}
+.shop-input[aria-invalid=true]{border-color:#ae3240}
+textarea.shop-input{width:100%;display:block;min-height:1.5em;resize:vertical;overflow:auto}
+.shop-input::placeholder{color:#626980;opacity:1}
+.shop-editing .detail-heading>div:first-child{min-width:0;flex:1}
+#detail-name textarea{min-height:1.06em;line-height:1.06;resize:none;padding:0;overflow:hidden}
+#detail-family select{font:inherit;letter-spacing:inherit;text-transform:inherit}
+.shop-editing #detail-format,.shop-editing #detail-price{margin-inline:0}
+#detail-price input{min-width:4ch;max-width:12ch}
+#card-facts input,#card-facts select{width:100%}
+#card-facts .field-more{grid-column:1/-1}
+.field-more button{padding:.22rem 0;border:0;background:none;color:var(--navy);font:inherit;font-size:.85rem;text-decoration:underline;text-underline-offset:.2em;cursor:pointer}
+.availability-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem;margin:.8rem 0 0}
+.availability-fields label{display:grid;gap:.24rem;font:inherit;font-size:.76rem;font-weight:700}
+.availability-fields .shop-input{width:100%;border:1px solid var(--line);background:#fff;font-size:.9rem;font-weight:500;padding:.4rem}
+#edit-drawer{margin:auto 0 auto auto;border:0;border-left:1px solid #dae0e8;max-width:100%;width:30rem;height:100dvh;max-height:100dvh;padding:0;background:#fafaf8;box-shadow:-8px 0 40px #17234420;overflow:auto}
+#edit-drawer::backdrop{background:#101b374d}#edit-drawer header{position:sticky;top:0;z-index:2;background:#fafaf8;border-bottom:1px solid #dfe2ea;padding:1rem 1.4rem;display:flex;align-items:center;justify-content:space-between}
+#edit-drawer h2{font-family:inherit;margin:0;font-size:1.45rem;letter-spacing:-.045em}#edit-drawer #edit-close{height:36px;width:36px;padding:0}
+#edit-drawer .form-body{padding:1.25rem 1.4rem;display:grid;gap:1rem}#edit-drawer label{display:grid;gap:.35rem;font-size:.9rem;font-weight:700}
+#edit-drawer :is(input,textarea,select){width:100%;min-width:0;border:1px solid #bcc4d1;border-radius:.55rem;background:#fff;padding:.62rem .72rem;color:inherit;font:inherit;font-weight:500}
+#edit-drawer textarea{resize:vertical}#edit-drawer .cols,#edit-drawer .prices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}
+#edit-drawer .photo-area{display:grid;grid-template-columns:70px 1fr;gap:.8rem;align-items:center}#edit-drawer .frame{display:grid;place-items:center;background:#e9edf3;border-radius:.6rem;height:85px}#edit-drawer .frame img{width:100%;height:85px;object-fit:contain}#edit-drawer small{font-size:.8rem;color:#596276;font-weight:500}#edit-drawer .photo-tools{display:grid;gap:.65rem}#edit-drawer .photo-tools img{width:100%;max-height:220px;object-fit:contain}#edit-drawer .photo-tools label{display:flex}#edit-drawer input[type=checkbox]{width:auto}
+#edit-drawer .actions{position:sticky;bottom:0;background:#fafaf8;border-top:1px solid #dfe2ea;display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:1rem 1.4rem}#staff-profile{display:grid;gap:.6rem}#staff-profile[hidden]{display:none}
+@media(max-width:520px){#edit-bar{width:calc(100% - 16px);gap:.35rem;padding:.5rem}#edit-bar span{flex:1;padding:0}#edit-bar button{padding:.55rem;font-size:.85rem}#edit-bar small{font-size:.75rem}}
+#checkout-note{display:block;margin-top:.6rem;color:#576079;font-size:.84rem}
+#checkout-note[hidden]{display:none}
+
+
+.catalogue-add {
+  width:100%;
+  min-width:0;
+  align-self:start;
+  display:grid;
+  place-content:center;
+  justify-items:center;
+  position:relative;
+  aspect-ratio:.9;
+  padding:12px;
+  color:var(--ink);
+  background:#f8f8f6;
+  border:1px dashed #a4a9b4;
+  cursor:pointer;
+  transition:background .18s,border-color .18s;
+}
+body:not(.shop-editing) .catalogue-add {display:none}
+.catalogue-add-mark {
+  display:grid;
+  place-items:center;
+  width:clamp(42px,4.3vw,60px);
+  aspect-ratio:1;
+  border:1px solid #c3c7cf;
+  border-radius:50%;
+  background:#fff;
+  transition:transform .2s var(--easing);
+}
+.catalogue-add-mark::before,.catalogue-add-mark::after {
+  content:"";
+  grid-area:1/1;
+  width:18px;
+  height:2px;
+  background:currentColor;
+  border-radius:2px;
+}
+.catalogue-add-mark::after {transform:rotate(90deg)}
+.catalogue-add-label {
+  position:absolute;
+  top:calc(50% + clamp(21px,2.15vw,30px) + 5px);
+  left:0;
+  right:0;
+  opacity:0;
+  font:700 .85rem/1.25 DM,system-ui,sans-serif;
+  transition:opacity .18s;
+}
+.catalogue-add:is(:hover,:focus-visible) {background:#f0f2f5;border-color:#59647b}
+.catalogue-add:is(:hover,:focus-visible) .catalogue-add-mark {transform:translateY(-3px)}
+.catalogue-add:is(:hover,:focus-visible) .catalogue-add-label {opacity:1}
+.catalogue-add:focus-visible {outline:2px solid var(--ink);outline-offset:3px}
+@media(hover:none) {.catalogue-add-label {opacity:1}}
+html[data-motion="reduced"] .catalogue-add,
+html[data-motion="reduced"] .catalogue-add :is(.catalogue-add-mark,.catalogue-add-label) {transition:none}

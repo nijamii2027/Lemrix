@@ -1,0 +1,117 @@
+// The set index is reference data. Listing counts and prices always come from this shop.
+window.LemrixCollection=(()=>{
+  const id=s=>document.getElementById(s);
+  const form=id('catalogue-tools'),dialog=id('sets-dialog'),faces=id('photo-faces');
+  const norm=s=>String(s||'').normalize('NFKC').trim().toLowerCase();
+  const params=()=>new URLSearchParams(location.hash.startsWith('#collection/')?location.hash.split('?')[1]||'':location.hash.slice(1));
+  const written=q=>{
+    q.set('view','catalogue');
+    const route=location.hash.startsWith('#collection/')?location.hash.split('?')[0]+'?':'#';
+    location.hash=route+q.toString();
+  };
+  const setValue=(q,k,v)=>v?q.set(k,v):q.delete(k);
+  const usable=item=>Number.isInteger(item.quantity)&&item.quantity>0 && item.collection!=='pre-orders';
+  const kind=item=>item.card?.productType || (item.category==='Singles'?'card':item.category==='Packs'?'pack':'accessory');
+  const badge=item=>[item.card?.grader,item.card?.grade].filter(Boolean).join(' ');
+  const amount=item=>item.copies?.length?Math.min(...item.copies.map(c=>c.cents)):item.cents;
+  const eq=(a,b)=>norm(a)===norm(b);
+  let era='',catalogue=[],current=null,front='',back='',side='front';
+  function apply(items){
+    const q=params(),type=q.get('type'),lang=q.get('language'),set=q.get('set'),series=q.get('era'),sort=q.get('sort');
+    const out=items.filter(item=>(!type||kind(item)===type)&&(!lang||eq(item.card?.language,lang))&&
+      (!set||eq(item.card?.set,set))&&(!series||eq(item.card?.series,series))&&(!q.has('stock')||usable(item)));
+    if(sort==='low'||sort==='high')out.sort((a,b)=>(amount(a)-amount(b))*(sort==='high'?-1:1));
+    else if(sort==='name')out.sort((a,b)=>a.name.localeCompare(b.name));
+    else if(sort==='new')out.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+    return out;
+  }
+  function sync() {
+    const q=params();
+    for(const k of ['type','language','sort'])form.elements[k].value=q.get(k)||'';
+    form.elements.stock.checked=q.has('stock');
+    const clear=id('applied-set');clear.hidden=!q.get('set');
+    clear.firstElementChild.textContent=q.get('set')||'';
+  }
+  form.addEventListener('change',()=>{
+    const q=params();
+    for(const k of ['type','language','sort'])setValue(q,k,form.elements[k].value);
+    setValue(q,'stock',form.elements.stock.checked?'1':'');written(q);
+  });
+  id('applied-set').querySelector('button').onclick=()=>{const q=params();q.delete('set');q.delete('era');written(q);};
+  function element(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;n.textContent=txt;return n;}
+  function makeSetButton(set){
+    const b=element('button','set-cell','');b.type='button';
+    b.append(element('small','set-code',set.code||set.language),element('strong','',set.name));
+    b.append(element('span','set-count',[set.language,set.printedTotal?set.printedTotal+' cards in set':'',set.stock+' in stock'].filter(Boolean).join(' · ')));
+    b.onclick=()=>{
+      dialog.close();
+      const q=new URLSearchParams({view:'catalogue',set:set.name,language:set.language});
+      location.hash=q.toString();
+    };
+    return b;
+  }
+  function drawSets(){
+    const term=norm(id('set-query').value);
+    const pool=catalogue.filter(s=>!term||[s.name,s.series,s.code,s.language,...s.aliases||[]].some(t=>norm(t).includes(term)));
+    const eras=[...new Set(pool.map(s=>s.series))];
+    if(!eras.includes(era))era=eras[0]||'';
+    const collection=term?pool:pool.filter(s=>s.series===era);
+    const buttons=eras.map(name=>{
+      const b=element('button','','');b.type='button';b.append(element('span','',name),element('small','',pool.filter(s=>s.series===name).length));
+      b.setAttribute('aria-pressed',String(era===name&&!term));b.onclick=()=>{era=name;id('set-query').value='';drawSets();};return b;
+    });
+    id('set-eras').replaceChildren(...buttons);id('era-heading').textContent=term?'Matching sets':era;
+    id('set-options').replaceChildren(...(collection.length?collection.map(makeSetButton):[element('p','','No matching sets.')]));
+  }
+  function openSets(){
+    catalogue=(window.LemrixSets||[]).map(s=>({...s,stock:0}));
+    const lookup=new Map(catalogue.map(s=>[norm(s.language)+'/'+norm(s.name),s]));
+    for(const item of products){
+      const c=item.card;if(!c?.set)continue;
+      const key=norm(c.language)+'/'+norm(c.set);
+      let entry=lookup.get(key);
+      if(!entry){entry={name:c.set,language:c.language||'',series:c.series||'Other sets',stock:0};lookup.set(key,entry);catalogue.push(entry);}
+      if(usable(item))entry.stock+=item.quantity;
+    }
+    id('set-query').value='';era=catalogue.find(s=>s.stock)?.series||era||catalogue[0]?.series||'';
+    drawSets();dialog.showModal();id('set-query').focus();
+  }
+  id('sets-open').onclick=openSets;id('set-query').oninput=drawSets;
+  for(const d of document.querySelectorAll('.collector-dialog')){
+    d.querySelector('[data-close]').onclick=()=>d.close();
+    d.addEventListener('click',e=>{if(e.target!==d)return;const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();});
+  }
+  function paintFace(){
+    const src=side==='back'?back:front;
+    for(const b of faces.children)b.setAttribute('aria-pressed',String(b.dataset.side===side));
+    for(const key of ['detail-art','closeup-art']){
+      const img=id(key);img.src=src;img.alt=key==='detail-art'?current.name+' · '+side:'';
+    }
+    const zoom=id('closeup');zoom.setAttribute('aria-pressed','false');zoom.setAttribute('aria-label','Zoom '+side+' photo');
+    zoom.style.removeProperty('--zoom-point');
+  }
+  function inspect(item,copyIndex=0){
+    current=item;side='front';
+    const copy=item.copies?.[copyIndex];
+    front=copy?.photos?.front||item.image||'art/'+item.id+'.webp';
+    back=copy?.photos?.back||(!copy||copyIndex===0?item.backImage:'');
+    faces.hidden=!back;paintFace();
+    const c=item.card||{},dl=id('card-facts'),nodes=[];
+    for(const [label,value] of [['Set',c.set],['Era',c.series],['Number',c.cardNumber],['Language',c.language],['Year',c.year],['Grade',badge(item)],['Condition',c.itemCondition],['Certificate',c.certificate]]){
+      if(!value)continue;
+      const dt=element('dt','',label),dd=element('dd','',value);
+      if(label==='Certificate' && eq(c.grader,'PSA') && /^\d{5,12}$/.test(value)){
+        const link=element('a','',value+' · View PSA record');link.href='https://www.psacard.com/cert/'+value;link.target='_blank';link.rel='noopener';dd.replaceChildren(link);
+      }
+      nodes.push(dt,dd);
+    }
+    dl.replaceChildren(...nodes);dl.hidden=!nodes.length;
+  }
+  for(const b of faces.children)b.onclick=()=>{side=b.dataset.side;paintFace();};
+  const zoom=id('closeup');
+  zoom.addEventListener('pointermove',e=>{
+    if(zoom.getAttribute('aria-pressed')!=='true')return;
+    const r=zoom.getBoundingClientRect();zoom.style.setProperty('--zoom-point',Math.max(0,Math.min(100,(e.clientX-r.left)/r.width*100))+'% '+Math.max(0,Math.min(100,(e.clientY-r.top)/r.height*100))+'%');
+  });
+  return {apply,sync,inspect,badge,selectedSet:()=>params().get('set')};
+})();

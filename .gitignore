@@ -1,18 +1,10 @@
-awwwards-font-research.html
-humane-source.html
-galgo-source.html
-fontshare-license.html
-fontshare.css
-humane.css
-ranade.css
-galgo.zip
-*.tar.gz
 
-social-source.html
-
-.vercel/
-
-# Generated Sites Worker build output.
+.lemrix-data/
 dist/client/
 dist/server/
 dist/.openai/
+.vercel/
+.env
+.env.*
+public/
+rewards/prints/

@@ -1,0 +1,27 @@
+@view-transition{navigation:auto}
+
+html[data-store-visit]{--store-ease:cubic-bezier(.22,.77,.2,1);--store-exit:-3.7vh;--store-arrive:4.5vh}
+html[data-store-visit="return"]{--store-exit:3.7vh;--store-arrive:-4.5vh}
+html[data-store-visit] [data-store-emblem]{view-transition-name:store-emblem}
+html[data-store-visit]::view-transition{background:#fcf7e9}
+html[data-store-visit]::view-transition-group(root),
+html[data-store-visit]::view-transition-group(store-emblem){animation-duration:520ms;animation-timing-function:var(--store-ease)}
+html[data-store-visit]::view-transition-old(root){animation:store-away 400ms var(--store-ease) both;mix-blend-mode:normal}
+html[data-store-visit]::view-transition-new(root){animation:store-arrival 520ms var(--store-ease) both;mix-blend-mode:normal}
+html[data-store-visit]::view-transition-old(store-emblem),
+html[data-store-visit]::view-transition-new(store-emblem){height:100%;width:100%;object-fit:contain;mix-blend-mode:normal}
+html[data-store-visit]::view-transition-old(store-emblem){animation:store-emblem-out 300ms ease both}
+html[data-store-visit]::view-transition-new(store-emblem){animation:store-emblem-in 390ms ease both}
+@keyframes store-away{from{opacity:1;transform:none}to{opacity:0;transform:translateY(var(--store-exit)) scale(.987)}}
+@keyframes store-arrival{from{opacity:0;transform:translateY(var(--store-arrive)) scale(1.014)}to{opacity:1;transform:none}}
+@keyframes store-emblem-out{0%,32%{opacity:1}100%{opacity:0}}
+@keyframes store-emblem-in{0%{opacity:0}55%,100%{opacity:1}}
+/* An opacity wash avoids transforming the document in fallback engines.
+   The homepage's fixed navigation and sticky story keep their native geometry. */
+html[data-store-fallback="arriving"]:after{content:"";position:fixed;inset:0;z-index:2147483000;pointer-events:none;background:#fcf7e9;animation:store-wash 440ms ease-out both}
+@keyframes store-wash{from{opacity:.58}to{opacity:0}}
+
+  html[data-motion="reduced"][data-store-fallback="arriving"]:after{display:none}
+  html[data-motion="reduced"][data-store-visit]::view-transition-group(*),
+  html[data-motion="reduced"][data-store-visit]::view-transition-old(*),
+  html[data-motion="reduced"][data-store-visit]::view-transition-new(*){animation-duration:.01ms!important}

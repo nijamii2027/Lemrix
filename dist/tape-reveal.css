@@ -1,0 +1,15 @@
+.tape-reveal{position:absolute;inset:0;z-index:16;pointer-events:none;visibility:hidden;overflow:hidden;contain:strict}
+.tape-reveal svg{display:block;width:100%;height:100%;overflow:visible}
+.tape-reveal .tear-ink{stroke:#302742;stroke-width:2.6;stroke-linejoin:round;fill:#ffcf50}
+.tape-reveal .tear-cast{fill:#27263c;opacity:.28}
+.tape-reveal .tear-print{
+  fill:#302742;font-family:BarlowTape,'Arial Narrow',sans-serif;font-weight:850;
+  letter-spacing:.035em;text-transform:uppercase;font-kerning:normal
+}
+.tape-reveal .tear-glint{fill:none;stroke:#fff1be;stroke-opacity:.8;stroke-width:1.5}
+.night.tape-is-snapped .ribbon-near{visibility:hidden}
+.night.tape-is-returning .ribbon-near{
+  /* Keep the individual translate free for the foreground parallax. */
+  transform:translateY(var(--tape-return-y,0px)) rotate(calc(var(--slant) + var(--tape-return-tilt,0deg)));
+}
+html[data-motion="reduced"] .tape-reveal{display:none}

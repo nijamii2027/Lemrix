@@ -1,9 +1,49 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": "",
   "installCommand": "",
-  "outputDirectory": "dist",
-  "cleanUrls": true,
-  "trailingSlash": true
+  "buildCommand": "node scripts/build-vercel.mjs",
+  "outputDirectory": "public",
+  "redirects": [
+    {
+      "source": "/shop",
+      "destination": "https://lemrix-tcg-illustrated.beefybag2.chatgpt.site/shop/",
+      "permanent": false
+    },
+    {
+      "source": "/shop/",
+      "destination": "https://lemrix-tcg-illustrated.beefybag2.chatgpt.site/shop/",
+      "permanent": false
+    },
+    {
+      "source": "/shop/index.html",
+      "destination": "https://lemrix-tcg-illustrated.beefybag2.chatgpt.site/shop/",
+      "permanent": false
+    },
+    {
+      "source": "/admin",
+      "destination": "https://lemrix-tcg-illustrated.beefybag2.chatgpt.site/shop/#account",
+      "permanent": false
+    },
+    {
+      "source": "/admin/",
+      "destination": "https://lemrix-tcg-illustrated.beefybag2.chatgpt.site/shop/#account",
+      "permanent": false
+    },
+    {
+      "source": "/admin/index.html",
+      "destination": "https://lemrix-tcg-illustrated.beefybag2.chatgpt.site/shop/#account",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/after-hours",
+      "destination": "/after-hours/index.html"
+    },
+    {
+      "source": "/after-hours/",
+      "destination": "/after-hours/index.html"
+    }
+  ]
 }

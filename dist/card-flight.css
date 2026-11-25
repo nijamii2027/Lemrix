@@ -1,0 +1,27 @@
+/* First paint already matches the flight's opening frame, even before scripts
+   or scene dimensions are available. The motion uses the same transform origin. */
+.cards:not([data-flight-ready]) > .flight-card {
+  left: var(--flight-x);
+  top: var(--flight-y);
+  transform: rotate(var(--flight-a)) scale(var(--flight-sx),var(--flight-sy));
+}
+.green-scene .flight-card:nth-child(1) { --flight-x:46.00%; --flight-y:83.00%; --flight-a:0.00deg; --flight-sx:1.0100; --flight-sy:1.0100; }
+.green-scene .flight-card:nth-child(2) { --flight-x:78.53%; --flight-y:52.51%; --flight-a:92.31deg; --flight-sx:-0.3945; --flight-sy:0.4396; }
+.green-scene .flight-card:nth-child(3) { --flight-x:-17.05%; --flight-y:21.11%; --flight-a:270.28deg; --flight-sx:0.5939; --flight-sy:0.9724; }
+.green-scene .flight-card:nth-child(4) { --flight-x:79.62%; --flight-y:21.64%; --flight-a:462.88deg; --flight-sx:-0.1018; --flight-sy:0.5123; }
+.green-scene .flight-card:nth-child(5) { --flight-x:27.31%; --flight-y:46.97%; --flight-a:572.35deg; --flight-sx:-0.2208; --flight-sy:0.8694; }
+.green-scene .flight-card:nth-child(6) { --flight-x:9.70%; --flight-y:70.43%; --flight-a:652.95deg; --flight-sx:0.4182; --flight-sy:0.6388; }
+.green-scene .flight-card:nth-child(7) { --flight-x:96.91%; --flight-y:71.06%; --flight-a:811.76deg; --flight-sx:-0.6702; --flight-sy:0.7276; }
+.green-scene .flight-card:nth-child(8) { --flight-x:-0.12%; --flight-y:45.72%; --flight-a:1012.80deg; --flight-sx:0.7851; --flight-sy:0.7864; }
+.green-scene .flight-card:nth-child(9) { --flight-x:71.21%; --flight-y:17.21%; --flight-a:1142.87deg; --flight-sx:-0.5086; --flight-sy:0.5839; }
+.green-scene .flight-card:nth-child(10) { --flight-x:76.83%; --flight-y:20.71%; --flight-a:1218.55deg; --flight-sx:0.5178; --flight-sy:0.9168; }
+.tv-scene .flight-card:nth-child(1) { --flight-x:91.29%; --flight-y:68.78%; --flight-a:86.92deg; --flight-sx:0.4686; --flight-sy:0.9418; }
+.tv-scene .flight-card:nth-child(2) { --flight-x:56.27%; --flight-y:82.19%; --flight-a:175.74deg; --flight-sx:-0.0353; --flight-sy:0.5531; }
+.tv-scene .flight-card:nth-child(3) { --flight-x:11.28%; --flight-y:54.01%; --flight-a:271.88deg; --flight-sx:-0.3145; --flight-sy:0.8211; }
+.tv-scene .flight-card:nth-child(4) { --flight-x:100.39%; --flight-y:23.15%; --flight-a:453.99deg; --flight-sx:0.5194; --flight-sy:0.6915; }
+.tv-scene .flight-card:nth-child(5) { --flight-x:-1.23%; --flight-y:21.29%; --flight-a:643.48deg; --flight-sx:-0.6508; --flight-sy:0.6741; }
+.tv-scene .flight-card:nth-child(6) { --flight-x:44.50%; --flight-y:44.56%; --flight-a:748.27deg; --flight-sx:0.8217; --flight-sy:0.8373; }
+.tv-scene .flight-card:nth-child(7) { --flight-x:67.70%; --flight-y:69.29%; --flight-a:831.19deg; --flight-sx:-0.4292; --flight-sy:0.5391; }
+.tv-scene .flight-card:nth-child(8) { --flight-x:-16.85%; --flight-y:72.74%; --flight-a:995.07deg; --flight-sx:0.4264; --flight-sy:0.9527; }
+.tv-scene .flight-card:nth-child(9) { --flight-x:87.37%; --flight-y:47.78%; --flight-a:1194.66deg; --flight-sx:-0.0032; --flight-sy:0.4509; }
+.tv-scene .flight-card:nth-child(10) { --flight-x:28.01%; --flight-y:16.92%; --flight-a:1319.40deg; --flight-sx:-0.4381; --flight-sy:1.0077; }
