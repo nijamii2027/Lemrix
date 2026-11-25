@@ -1,124 +1,130 @@
 import assert from 'node:assert/strict';
-import {createHash, randomBytes, randomUUID} from 'node:crypto';
+import {pbkdf2Sync, randomUUID} from 'node:crypto';
+import {runInNewContext} from 'node:vm';
 import worker from '../dist/server/index.js';
 
-// Every request and persisted object in this suite is an isolated fixture.
-// The only outbound integration, Stripe, is replaced with a strict mock below.
-const backend = 'https://lemrix-tcg-illustrated.beefybag2.chatgpt.site';
+// All records and integrations in this suite are isolated fixtures.
 const storefront = 'https://lemrix.vercel.app';
-const legacy = 'https://lemrix-surf.vercel.app';
-const records = new Map();
-let revision = 0;
-const env = {
-  ADMIN_EMAIL:'owner@example.com', ADMIN_PASSWORD:'fixture-password', SESSION_SECRET:'fixture-session-secret',
-  BUCKET:{
-    async get(key) { return records.get(key) || null; },
-    async head(key) { return records.get(key) || null; },
-    async delete(key) { records.delete(key); },
-    async put(key, value, options = {}) {
-      const previous = records.get(key);
-      const match = options.onlyIf?.get('If-Match');
-      if (match && (!previous || match !== '"' + previous.etag + '"')) return null;
-      if (options.onlyIf?.get('If-None-Match') === '*' && previous) return null;
-      const entry = {...options, etag:String(++revision), json:async () => JSON.parse(value)};
-      records.set(key, entry);
-      return entry;
+const password = 'fixture-native-password';
+const salt = Buffer.from('native-auth-fixture-salt');
+const passwordHash = 'pbkdf2-sha256$600000$' + salt.toString('hex') + '$' + pbkdf2Sync(password, salt, 600000, 32, 'sha256').toString('hex');
+const credentials = {username:'Lemrix', password};
+const forgedIdentity = {'oai-authenticated-user-email':'owner@example.com', 'x-lemrix-owner-email':'owner@example.com'};
+const sessionPrefix = 'store/v2/admin-sessions/';
+const ratePrefix = 'store/v2/admin-login-limits/';
+
+function fixture(ip = '198.51.100.10') {
+  const records = new Map();
+  let revision = 0;
+  const env = {
+    ADMIN_PASSWORD_HASH:passwordHash, SESSION_SECRET:'fixture-native-session-secret', CLIENT_IP:ip,
+    BUCKET:{
+      async get(key) { return records.get(key) || null; },
+      async head(key) { return records.get(key) || null; },
+      async delete(key) { records.delete(key); },
+      async put(key, value, options = {}) {
+        const previous = records.get(key);
+        const match = options.onlyIf?.get('If-Match');
+        if (match && (!previous || match !== '"' + previous.etag + '"')) return null;
+        if (options.onlyIf?.get('If-None-Match') === '*' && previous) return null;
+        const entry = {...options, etag:String(++revision), json:async () => JSON.parse(value)};
+        records.set(key, entry);
+        return entry;
+      },
     },
-  },
-};
-const digest = value => createHash('sha256').update(value).digest('hex');
-const token = () => randomBytes(32).toString('hex');
-const verified = {'oai-authenticated-user-email':env.ADMIN_EMAIL};
-function call(path, body, headers = {}, method = body === undefined ? 'GET' : 'POST') {
-  const requestHeaders = new Headers({Origin:storefront, ...headers});
-  for (const [name, value] of Object.entries(headers)) if (value === null) requestHeaders.delete(name);
-  return worker.fetch(new Request(backend + path, {
-    method, headers:requestHeaders,
-    body:body === undefined ? undefined : JSON.stringify(body),
-  }), env);
+  };
+  function call(path, body, headers = {}, options = {}) {
+    const requestHeaders = new Headers({Origin:storefront});
+    for (const [name, value] of Object.entries(headers)) {
+      if (value === null) requestHeaders.delete(name);
+      else requestHeaders.set(name, value);
+    }
+    return (options.worker || worker).fetch(new Request(storefront + path, {
+      method:options.method || (body === undefined ? 'GET' : 'POST'), headers:requestHeaders,
+      body:body === undefined ? undefined : JSON.stringify(body),
+    }), options.env || env);
+  }
+  return {env, records, call};
 }
-function authPath({origin = storefront, state = token(), verifier = token(), challenge = digest(verifier)} = {}) {
-  return {origin, state, verifier, challenge,
-    path:'/api/owner-bridge/authorize?' + new URLSearchParams({origin, state, challenge})};
+
+const {env, records, call} = fixture();
+const cookieFrom = response => response.headers.getSetCookie().find(value => value.startsWith('__Host-lemrix-admin=')).split(';')[0];
+const cookieId = cookie => cookie.split('=')[1].split('.')[0];
+
+// Unknown and removed routes disclose no credential or storage configuration.
+for (const path of ['/api/unknown', '/api/owner-bridge/authorize', '/api/owner-bridge/exchange', '/api/owner/connect', '/api/owner/callback']) {
+  assert.equal((await call(path, undefined, forgedIdentity, {env:{}})).status, 404);
 }
-async function issue(overrides = {}) {
-  const request = authPath(overrides);
-  const response = await call(request.path, undefined, verified);
-  assert.equal(response.status, 302);
-  assert.equal(response.headers.get('Cache-Control'), 'no-store');
-  assert.equal(response.headers.get('Referrer-Policy'), 'no-referrer');
-  const callback = new URL(response.headers.get('Location'));
-  assert.equal(callback.origin, request.origin);
-  assert.equal(callback.pathname, '/api/owner/callback');
-  assert.equal(callback.searchParams.get('state'), request.state);
-  const code = callback.searchParams.get('code');
-  assert.match(code, /^[a-f0-9]{64}$/);
-  return {...request, code};
+assert.equal((await call('/api/login')).status, 405);
+for (const hash of [undefined, '', 'pbkdf2-sha256$1$abcd$abcd', passwordHash.replace('$600000$', '$1000$')]) {
+  const unconfigured = {...env, ADMIN_PASSWORD_HASH:hash, ADMIN_PASSWORD:password};
+  assert.equal((await call('/api/login', credentials, forgedIdentity, {env:unconfigured})).status, 503, 'No plaintext password fallback is allowed');
 }
-const payload = request => ({origin:request.origin, state:request.state, verifier:request.verifier, code:request.code});
-const exchange = (request, changes = {}, headers = {}) => call('/api/owner-bridge/exchange', {...payload(request), ...changes}, headers);
-const cookieFrom = response => response.headers.getSetCookie().find(value => value.startsWith('__Host-lemrix-owner=')).split(';')[0];
-const credentials = {username:'Lemrix', password:env.ADMIN_PASSWORD};
+assert.equal(records.size, 0);
 
-assert.equal((await call(authPath().path)).status, 403, 'Anonymous visitors cannot issue a bridge code');
-assert.equal((await call(authPath().path, undefined, {'x-lemrix-owner-email':env.ADMIN_EMAIL})).status, 403);
-assert.equal((await call(authPath().path, undefined, {'oai-authenticated-user-email':'guest@example.com'})).status, 403);
-for (const overrides of [{origin:'https://attacker.example'}, {origin:storefront + '/shop/'}, {state:'bad'}, {challenge:'bad'}]) {
-  assert.equal((await call(authPath(overrides).path, undefined, verified)).status, 400);
+assert.equal((await call('/api/account', undefined, forgedIdentity)).status, 401);
+assert.equal((await call('/api/items', undefined, forgedIdentity)).status, 401);
+assert.equal((await call('/api/items/push', {changes:[]}, forgedIdentity)).status, 401);
+assert.equal((await call('/api/account', undefined, {Cookie:'__Host-lemrix-owner=' + 'a'.repeat(64), ...forgedIdentity})).status, 401);
+assert.equal((await call('/api/login', {...credentials, password:'incorrect'}, forgedIdentity)).status, 401);
+assert.equal((await call('/api/login', {...credentials, username:'someone-else'})).status, 401);
+assert.equal((await call('/api/login', {username:'Lemrix'})).status, 401);
+
+const login = await call('/api/login', credentials);
+assert.equal(login.status, 200, 'Username and password work without an external identity');
+const firstCookie = cookieFrom(login);
+assert.match(firstCookie, /^__Host-lemrix-admin=[a-f0-9]{64}\.[a-f0-9]{64}$/);
+assert.match(login.headers.getSetCookie()[0], /; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=28800$/);
+assert.doesNotMatch(login.headers.getSetCookie()[0], /Domain=|Partitioned|SameSite=None/i);
+assert.equal((await call('/api/account', undefined, {Cookie:firstCookie})).status, 200);
+assert.equal((await (await call('/api/account', undefined, {Cookie:firstCookie})).json()).username, 'Lemrix');
+assert.equal((await call('/api/account', undefined, {Cookie:firstCookie.slice(0, -1) + (firstCookie.endsWith('0') ? '1' : '0'), ...forgedIdentity})).status, 401);
+assert.equal((await call('/api/account', undefined, {Cookie:'__Host-lemrix-admin=' + 'a'.repeat(32) + '.' + 'b'.repeat(64), ...forgedIdentity})).status, 401, 'Old session tokens cannot authorize');
+
+const sessionKey = sessionPrefix + cookieId(firstCookie);
+const session = records.get(sessionKey);
+await env.BUCKET.put(sessionKey, '1', {customMetadata:{...session.customMetadata, expires:String(Date.now() - 1)}});
+assert.equal((await call('/api/account', undefined, {Cookie:firstCookie})).status, 401, 'Server expiry is enforced');
+await env.BUCKET.put(sessionKey, '1', {customMetadata:session.customMetadata});
+const changedHash = passwordHash.slice(0, -1) + (passwordHash.endsWith('0') ? '1' : '0');
+assert.equal((await call('/api/account', undefined, {Cookie:firstCookie}, {env:{...env, ADMIN_PASSWORD_HASH:changedHash}})).status, 401, 'Password changes invalidate old signatures');
+const renewed = await call('/api/login', credentials, {Cookie:firstCookie});
+assert.equal(renewed.status, 200);
+const renewedCookie = cookieFrom(renewed);
+assert.notEqual(renewedCookie, firstCookie);
+assert.equal((await call('/api/account', undefined, {Cookie:firstCookie})).status, 401, 'Login rotates the previous session');
+assert.equal((await call('/api/account', undefined, {Cookie:renewedCookie})).status, 200);
+
+for (const origin of ['https://attacker.example', 'https://lemrix-surf.vercel.app', 'null', null]) {
+  const headers = {Cookie:renewedCookie, Origin:origin, ...forgedIdentity};
+  assert.equal((await call('/api/login', credentials, headers)).status, 403);
+  assert.equal((await call('/api/logout', {}, headers)).status, 403);
+  assert.equal((await call('/api/items/push', {changes:[]}, headers)).status, 403);
+  assert.equal((await call('/api/rewards/join', {}, headers)).status, 403);
+  assert.equal((await call('/api/customer/logout', {}, headers)).status, 403);
 }
-assert.equal((await call('/api/owner-bridge/exchange', {origin:storefront, state:token(), verifier:token(), code:token()})).status, 401);
+assert.equal((await call('/api/customer/logout', {})).status, 200);
+const secondCookie = cookieFrom(await call('/api/login', credentials));
+assert.equal((await call('/api/logout', {}, {Cookie:renewedCookie})).status, 200);
+assert.equal((await call('/api/account', undefined, {Cookie:renewedCookie})).status, 401);
+assert.equal((await call('/api/account', undefined, {Cookie:secondCookie})).status, 200, 'Ordinary logout leaves another session alone');
+const thirdCookie = cookieFrom(await call('/api/login', credentials));
+const logoutAll = await call('/api/logout-all', {}, {Cookie:secondCookie});
+assert.equal(logoutAll.status, 200);
+assert.equal(logoutAll.headers.getSetCookie().length, 1);
+assert.match(logoutAll.headers.getSetCookie()[0], /Max-Age=0$/);
+for (const Cookie of [secondCookie, thirdCookie]) assert.equal((await call('/api/account', undefined, {Cookie})).status, 401);
 
-const first = await issue();
-assert.equal((await exchange(first, {verifier:token()})).status, 401, 'PKCE binds the verifier');
-assert.equal((await exchange(first, {state:token()})).status, 401, 'State must match');
-assert.equal((await exchange(first, {origin:legacy}, {Origin:legacy})).status, 401, 'Code is bound to one storefront');
-assert.equal((await exchange(first, {}, {Origin:legacy})).status, 400);
-assert.equal((await exchange(first, {}, {Origin:'https://attacker.example'})).status, 403);
-assert.equal((await exchange(first, {}, {Origin:null})).status, 403, 'Missing browser origin is rejected');
-const accepted = await exchange(first);
-assert.equal(accepted.status, 200);
-const proof = cookieFrom(accepted);
-const cookieHeader = accepted.headers.getSetCookie()[0];
-assert.match(cookieHeader, /; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=28800$/);
-assert.doesNotMatch(cookieHeader, /Domain=/i);
-assert.equal((await exchange(first)).status, 401, 'Code cannot be replayed');
-assert.equal((await call(authPath().path, undefined, {Cookie:proof})).status, 403, 'Proof cannot issue another proof');
-const proofToken = proof.split('=')[1];
-assert.ok(records.has('store/v1/owner-proofs/' + digest(proofToken)));
-assert.ok(![...records.keys()].some(key => key.endsWith(proofToken)), 'Stored session keys hash the bearer token');
+env.REQUIRE_STORED_CATALOGUE = true;
+const missing = await call('/shop/catalogue.js');
+assert.equal(missing.status, 503, 'Production cannot fall back to seed stock');
+assert.match((await missing.json()).error, /live inventory.*unavailable/);
+await env.BUCKET.put('store/v1/catalogue.json', JSON.stringify([]));
+assert.deepEqual(Array.from(runInNewContext((await (await call('/shop/catalogue.js')).text()) + ';products')), [], 'An empty real catalogue remains empty');
 
-assert.equal((await call('/api/account', undefined, {Cookie:proof})).status, 401, 'Owner verification still needs shop password');
-assert.equal((await call('/api/login', {...credentials, password:'incorrect'}, {Cookie:proof})).status, 401);
-const login = await call('/api/login', credentials, {Cookie:proof});
-assert.equal(login.status, 200);
-const adminCookie = login.headers.getSetCookie()[0].split(';')[0];
-const authenticated = proof + '; ' + adminCookie;
-assert.equal((await call('/api/account', undefined, {Cookie:authenticated})).status, 200);
-assert.equal((await call('/api/account', undefined, {Cookie:adminCookie})).status, 403, 'Admin session alone cannot replace owner verification');
-assert.equal((await call('/api/account', undefined, {Cookie:'__Host-lemrix-owner=' + token() + '; ' + adminCookie})).status, 403);
-assert.equal((await call('/api/account', undefined, {Cookie:authenticated, Origin:legacy})).status, 403, 'Proof is bound to its storefront');
-assert.equal((await call('/api/login', credentials, {Cookie:proof, Origin:'https://attacker.example'})).status, 403);
-assert.equal((await call('/api/login', credentials, {...verified, Origin:'https://attacker.example'})).status, 403);
-assert.equal((await call('/api/rewards/join', {}, {Origin:'https://attacker.example'})).status, 403);
-assert.equal((await call('/api/customer/logout', {}, {Origin:'https://attacker.example'})).status, 403);
-assert.equal((await call('/api/customer/logout', {})).status, 200, 'Approved storefront writes reach backend');
-
-const raced = await issue();
-const race = await Promise.all([exchange(raced), exchange(raced)]);
-assert.deepEqual(race.map(response => response.status).sort(), [200, 401], 'Atomic consume permits one simultaneous exchange');
-
-const expired = await issue();
-const expiredKey = 'store/v1/owner-bridge/' + digest(expired.code);
-await env.BUCKET.put(expiredKey, JSON.stringify({...await records.get(expiredKey).json(), expires:Date.now() - 1}));
-assert.equal((await exchange(expired)).status, 401);
-const proofKey = 'store/v1/owner-proofs/' + digest(proofToken);
-const originalProof = await records.get(proofKey).json();
-await env.BUCKET.put(proofKey, JSON.stringify({...originalProof, expires:Date.now() - 1}));
-assert.equal((await call('/api/account', undefined, {Cookie:authenticated})).status, 403, 'Expired proof is not an owner');
-await env.BUCKET.put(proofKey, JSON.stringify(originalProof));
-
-// A mocked Stripe call verifies that checkout returns to the validated public
-// domain. No checkout is created on any external service and stock is unchanged.
+// Test checkout uses the native admin session, and return URLs use the exact
+// current origin. This mock cannot create external orders or take payments.
+const finalCookie = cookieFrom(await call('/api/login', credentials));
 env.STRIPE_SECRET_KEY = 'sk_test_fixture';
 await env.BUCKET.put('store/v1/catalogue.json', JSON.stringify([
   {id:'fixture-pack', name:'Fixture pack', category:'Packs', cents:850, quantity:2, revision:1},
@@ -130,32 +136,55 @@ globalThis.fetch = async (url, options) => {
   stripeCalls++;
   assert.match(options.body.get('success_url'), /^https:\/\/lemrix\.vercel\.app\/shop\/\?checkout=/);
   assert.match(options.body.get('cancel_url'), /^https:\/\/lemrix\.vercel\.app\/shop\/\?checkout=cancelled/);
+  assert.equal(options.body.get('allowed_payment_method_types[0]'), 'card');
+  assert.equal(options.body.has('payment_method_types[0]'), false);
   return Response.json({id:'cs_test_fixture123456789', status:'open', livemode:false,
     url:'https://checkout.stripe.com/c/pay/cs_test_fixture123456789'});
 };
 try {
   const order = {itemId:'fixture-pack', copy:null, expectedCents:850, attempt:randomUUID(), started:Math.floor(Date.now() / 1000)};
-  assert.equal((await call('/api/checkout', order, {Cookie:proof})).status, 200);
-  assert.equal((await call('/api/checkout', order, {Cookie:proof, Origin:'https://attacker.example'})).status, 403);
+  assert.equal((await call('/api/checkout', order, forgedIdentity)).status, 403);
+  assert.equal((await call('/api/checkout', order, {Cookie:finalCookie})).status, 200);
+  assert.equal((await call('/api/checkout', order, {Cookie:finalCookie, Origin:'https://lemrix-surf.vercel.app'})).status, 403);
   assert.equal(stripeCalls, 1);
   assert.equal((await records.get('store/v1/catalogue.json').json())[0].quantity, 2);
 } finally { globalThis.fetch = originalFetch; }
 
-const beforeRevocation = await issue();
-const logoutAll = await call('/api/logout-all', {}, {Cookie:authenticated});
-assert.equal(logoutAll.status, 200);
-assert.equal(logoutAll.headers.getSetCookie().length, 2);
-assert.equal((await exchange(beforeRevocation)).status, 401, 'Logout-all revokes unredeemed codes');
-assert.equal((await call('/api/account', undefined, {Cookie:authenticated})).status, 403, 'Logout-all revokes owner proof');
-const otherProof = cookieFrom(race.find(response => response.status === 200));
-assert.equal((await call('/api/login', credentials, {Cookie:otherProof})).status, 403, 'Generation revokes all other proofs');
+// Concurrent requests race on the persistent store. Exactly fifteen may reach
+// password validation; restarting the module cannot reset that budget.
+const limited = fixture('203.0.113.8');
+const invalid = {username:'Lemrix', password:''};
+const raced = await Promise.all(Array.from({length:20}, () => limited.call('/api/login', invalid)));
+assert.equal(raced.filter(response => response.status === 401).length, 15);
+assert.equal(raced.filter(response => response.status === 429).length, 5);
+assert.ok(![...limited.records.keys()].some(key => key.startsWith(sessionPrefix)));
+const limitedResponse = await limited.call('/api/login', credentials);
+assert.equal(limitedResponse.status, 429, 'Correct credentials do not bypass an exhausted limit');
+assert.ok(Number(limitedResponse.headers.get('Retry-After')) > 0 && Number(limitedResponse.headers.get('Retry-After')) <= 900);
+const {default:reloadedWorker} = await import('../dist/server/index.js?native-auth-reload');
+assert.equal((await limited.call('/api/login', invalid, {}, {worker:reloadedWorker, env:{...limited.env}})).status, 429);
+assert.equal((await limited.call('/api/login', invalid, {'x-forwarded-for':'203.0.113.99'})).status, 429, 'Caller IP headers do not choose rate-limit keys');
+assert.equal((await limited.call('/api/login', invalid, {}, {env:{...limited.env, CLIENT_IP:'203.0.113.9'}})).status, 401);
+assert.ok(![...limited.records.keys()].some(key => key.includes('203.0.113.')));
+const ipKeys = [...limited.records.keys()].filter(key => key.startsWith(ratePrefix) && !key.endsWith('/global'));
+assert.equal(ipKeys.length, 2);
+for (const key of ipKeys) {
+  const previous = await limited.records.get(key).json();
+  await limited.env.BUCKET.put(key, JSON.stringify({...previous, expires:Date.now() - 1}));
+}
+assert.equal((await limited.call('/api/login', invalid)).status, 401, 'Expired windows permit attempts again');
+await limited.env.BUCKET.put(ratePrefix + 'global', JSON.stringify({attempts:300, expires:Date.now() + 60000}));
+assert.equal((await limited.call('/api/login', invalid, {}, {env:{...limited.env, CLIENT_IP:'203.0.113.10'}})).status, 429);
 
-const finalProof = cookieFrom(await exchange(await issue()));
-const finalLogin = await call('/api/login', credentials, {Cookie:finalProof});
-const finalAdmin = finalLogin.headers.getSetCookie()[0].split(';')[0];
-const finalLogout = await call('/api/logout', {}, {Cookie:finalProof + '; ' + finalAdmin});
-assert.equal(finalLogout.status, 200);
-assert.equal(finalLogout.headers.getSetCookie().length, 2);
-assert.equal((await call('/api/login', credentials, {Cookie:finalProof})).status, 403, 'Logout revokes the current bridge proof');
+const unknown = fixture();
+delete unknown.env.CLIENT_IP;
+for (let index = 0; index < 15; index++) assert.equal((await unknown.call('/api/login', invalid)).status, 401);
+assert.equal((await unknown.call('/api/login', invalid, {}, {env:{...unknown.env, CLIENT_IP:''}})).status, 429, 'Missing client IP uses a stable limit bucket');
 
-console.log('Verified Vercel origin allowlist, owner SSO bridge, PKCE/state/audience binding, atomic single-use codes, expiry/revocation, password/session requirements, CSRF rejection and Stripe public return URLs.');
+const contended = fixture();
+const put = contended.env.BUCKET.put;
+contended.env.BUCKET.put = async (key, ...rest) => key.startsWith(ratePrefix) ? null : put(key, ...rest);
+assert.equal((await contended.call('/api/login', credentials)).status, 503, 'Unavailable atomic rate storage fails closed');
+assert.equal(contended.records.size, 0);
+
+console.log('Verified native password-only admin login, signed secure sessions, forged-identity rejection, expiry/rotation/logout-all, exact-origin CSRF, persistent concurrent rate limits, stored-only production catalogue and same-origin Stripe returns.');

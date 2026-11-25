@@ -59,7 +59,7 @@
     const hash = await crypto.subtle.deriveBits({name: 'PBKDF2', hash: 'SHA-256', salt: bytes, iterations: 185000}, key, 256);
     return hex(new Uint8Array(hash));
   }
-  function alertText(message = '') { id('deal-error').textContent = message; id('owner-verify').hidden=true; }
+  function alertText(message = '') { id('deal-error').textContent = message; }
   function storageError() { alertText('This browser could not save the demo. Enable site storage and try again.'); }
   function nav() {
     if (window.shopEditor?.authenticated) { id('account-nav-label').textContent='Lemrix'; id('account-opener').setAttribute('aria-label','Open shop owner account'); return; }
@@ -188,7 +188,7 @@
         id('deal-pass').value='';
         nav();
         if (generation === token) openAccount();
-      } catch (error) { if (generation === token) { alertText(error.message); if (error.status===403) id('owner-verify').hidden=false; } }
+      } catch (error) { if (generation === token) alertText(error.message); }
       finally { id('deal-auth-submit').disabled=false; }
       return;
     }

@@ -69,7 +69,10 @@ async function rewardsRoute(request,env,url) {
   const print=rewardPrints.find(p=>action==='/art/'+p.id);
   if(!print)reject(404,'Reward not found.');
   if(rewardView(wallet).points<print.at)reject(403,'This print is still locked.');
-  return new Response(Uint8Array.from(atob(rewardArtwork[print.id]),c=>c.charCodeAt(0)),{headers:{
+  const fixture=rewardArtwork[print.id];
+  const stored=fixture ? null : await env.BUCKET.get('store/v2/reward-art/'+print.id);
+  if(!fixture && !stored)reject(503,'This print is temporarily unavailable.');
+  return new Response(fixture ? Uint8Array.from(atob(fixture),c=>c.charCodeAt(0)) : stored.body,{headers:{
     'Content-Type':'image/webp','Content-Disposition':'attachment; filename="Lemrix-'+print.id+'.webp"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'
   }});
 }

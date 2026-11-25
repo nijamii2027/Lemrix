@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "installCommand": "",
-  "buildCommand": "node scripts/build-vercel.mjs",
+  "installCommand": "npm ci --ignore-scripts",
+  "buildCommand": "npm run build",
   "outputDirectory": "public",
   "redirects": [
     {
@@ -33,6 +33,10 @@
   ],
   "rewrites": [
     {
+      "source": "/__migration",
+      "destination": "/api/migrate"
+    },
+    {
       "source": "/shop/catalogue.js",
       "destination": "/api/gateway?resource=catalogue"
     },
@@ -52,5 +56,14 @@
       "source": "/after-hours/",
       "destination": "/after-hours/index.html"
     }
-  ]
+  ],
+  "regions": [
+    "syd1"
+  ],
+  "functions": {
+    "api/*.mjs": {
+      "includeFiles": "dist/server/**",
+      "maxDuration": 60
+    }
+  }
 }

@@ -2,9 +2,10 @@
 .lemrix-data/
 dist/client/
 dist/server/
-dist/.openai/
 .vercel/
 .env
 .env.*
 public/
 rewards/prints/
+
+node_modules/

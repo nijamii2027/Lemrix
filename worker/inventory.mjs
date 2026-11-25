@@ -1,17 +1,14 @@
 const catalogueKey = 'store/v1/catalogue.json';
 const imagePrefix = 'store/v1/images/';
-const sessionPrefix = 'store/v1/sessions/';
-const sessionName = '__Host-lemrix-admin';
-const lifetime = 8 * 60 * 60;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const categories = new Set(['Singles', 'Packs', 'Accessories']);
 const photoPath = /^\/media\/([a-f0-9]{32})$/;
 const errors = {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
 class FormError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
+  constructor(status, message, headers={}) { super(message); this.status = status; this.headers = headers; }
 }
-function reject(status, message) { throw new FormError(status, message); }
+function reject(status, message, headers) { throw new FormError(status, message, headers); }
 function json(data, status=200, headers={}) {
   return Response.json(data, {status, headers:{...errors, ...headers}});
 }
@@ -53,34 +50,14 @@ function recognizedImage(data) {
   if (decoder.decode(data.slice(0,4)) === 'RIFF' && decoder.decode(data.slice(8,12)) === 'WEBP') return 'image/webp';
   return null;
 }
-async function owner(request, env) {
-  return trustedSiteOwner(request, env) || Boolean(await readOwnerProof(request, env));
-}
-async function sessionSignature(env, email, id) {
-  const key = await crypto.subtle.importKey('raw', encoder.encode(env.SESSION_SECRET), {name:'HMAC', hash:'SHA-256'}, false, ['sign']);
-  return hex(await crypto.subtle.sign('HMAC', key, encoder.encode(email+'|'+id)));
-}
-function cookie(value, seconds) {
-  return sessionName+'='+value+'; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age='+seconds;
-}
-async function sessionId(request, env) {
-  const token = (request.headers.get('Cookie')||'').split(/;\s*/).find(v=>v.startsWith(sessionName+'='))?.slice(sessionName.length+1);
-  if (!token || !/^[a-f0-9]{32}\.[a-f0-9]{64}$/.test(token)) return null;
-  const [id,signature] = token.split('.');
-  if (signature !== await sessionSignature(env,env.ADMIN_EMAIL,id)) return null;
-  const entry = await env.BUCKET.head(sessionPrefix+id);
-  if (!(Number(entry?.customMetadata?.expires) > Date.now())) return null;
-  const generation = await env.BUCKET.head('store/v1/admin-generation');
-  if ((entry.customMetadata.generation || '') !== (generation?.customMetadata?.generation || '')) return null;
-  return {id, expires:Number(entry.customMetadata.expires)};
-}
 async function getCatalogue(env, initial) {
   const saved = await env.BUCKET.get(catalogueKey);
+  if (!saved && env.REQUIRE_STORED_CATALOGUE) reject(503, 'The live inventory is temporarily unavailable. Please try again shortly.');
   if (!saved) return {items:initial.map(p=>({...p,revision:0})), etag:null};
   const items = await saved.json();
   const nigi = initial.find(item => item.id === 'nigi');
   const existing = items.find(item => item.id === 'nigi');
-  if (nigi && !existing) items.push({...nigi, revision:0});
+  if (!env.REQUIRE_STORED_CATALOGUE && nigi && !existing) items.push({...nigi, revision:0});
   if (existing?.name === 'Nigi') existing.name = 'Neegy';
   if (existing?.description === 'Nigi') existing.description = 'Neegy';
   return {items, etag:saved.etag};
@@ -172,8 +149,19 @@ export async function handleInventory(request, env, initial) {
   const image = path.match(photoPath);
   if (!path.startsWith('/api/') && path!=='/shop/catalogue.js' && !image) return null;
   try {
+    if (path.startsWith('/api/')) {
+      const methods = {
+        '/api/login':['POST'], '/api/logout':['POST'], '/api/logout-all':['POST'], '/api/account':['GET'],
+        '/api/items':['GET','POST'], '/api/items/push':['POST'], '/api/images':['POST'],
+        '/api/customer/session':['GET'], '/api/customer/challenge':['POST'], '/api/customer/google':['POST'], '/api/customer/logout':['POST'],
+        '/api/rewards':['GET'], '/api/rewards/code':['GET'], '/api/rewards/join':['POST'], '/api/rewards/recover':['POST'],
+        '/api/rewards/art/hill-club':['GET'], '/api/rewards/art/last-showing':['GET'], '/api/rewards/art/after-hours':['GET'],
+        '/api/checkout':['POST'], '/api/checkout/status':['POST'], '/api/checkout/cancel':['POST'], '/api/stripe/webhook':['POST'],
+      }[path];
+      if (!methods) reject(404, 'Unknown route.');
+      if (!methods.includes(request.method)) reject(405, 'Method unavailable.');
+    }
     if (!env.BUCKET) reject(503,'Inventory storage is unavailable.');
-    if (path.startsWith('/api/owner-bridge/')) return await ownerBridgeRoute(request,env,url);
     if (path==='/api/rewards'||path.startsWith('/api/rewards/')) return await rewardsRoute(request,env,url);
     if (path.startsWith('/api/customer/')) return await customerRoute(request,env,url);
     if (['/api/checkout','/api/checkout/status','/api/checkout/cancel','/api/stripe/webhook'].includes(path)) {
@@ -200,27 +188,14 @@ export async function handleInventory(request, env, initial) {
       return new Response(object.body || null,{headers:{'Content-Type':object.httpMetadata.contentType,'Content-Length':String(object.size),'X-Content-Type-Options':'nosniff','Cache-Control':'private, max-age=31536000, immutable'}});
     }
     if (!path.startsWith('/api/')) reject(405,'Method unavailable.');
-    if (!env.ADMIN_EMAIL || !env.ADMIN_PASSWORD || !env.SESSION_SECRET) reject(503,'Admin credentials have not been configured.');
-    if (!await owner(request, env)) reject(403,'Sign in with the site owner’s ChatGPT account, then enter your shop password.');
+    requireAdminConfiguration(env);
     if (request.method!=='GET') requireTrustedOrigin(request,url);
-    if (path==='/api/login' && request.method==='POST') {
-      const body=await readForm(request);
-      if (body.username!=='Lemrix' || !isText(body.password,256) || body.password!==env.ADMIN_PASSWORD) reject(401,'Incorrect login');
-      const id=randomId(), signature=await sessionSignature(env,env.ADMIN_EMAIL,id);
-      const generation = await env.BUCKET.head('store/v1/admin-generation');
-      await env.BUCKET.put(sessionPrefix+id,'1',{customMetadata:{generation:generation?.customMetadata?.generation || '',expires:String(Date.now()+lifetime*1000)}});
-      return json({ok:true},200,{'Set-Cookie':cookie(id+'.'+signature,lifetime)});
-    }
+    if (path==='/api/login' && request.method==='POST') return await adminLogin(request,env);
     const session=await sessionId(request,env);
     if (!session) reject(401,'Sign in required');
-    if (path==='/api/account' && request.method==='GET') return json({username:'Lemrix',expires:session.expires});
+    if (path==='/api/account' && request.method==='GET') return json({username:adminUsername,expires:session.expires});
     if ((path==='/api/logout' || path==='/api/logout-all') && request.method==='POST') {
-      await revokeOwnerProof(request,env);
-      if (path==='/api/logout-all') await env.BUCKET.put('store/v1/admin-generation','1',{customMetadata:{generation:randomId()}});
-      await env.BUCKET.delete(sessionPrefix+session.id);
-      const response = json({ok:true},200,{'Set-Cookie':cookie('',0)});
-      response.headers.append('Set-Cookie',ownerProofSetCookie('',0));
-      return response;
+      return await adminLogout(env,session,path==='/api/logout-all');
     }
     if (path==='/api/items' && request.method==='GET') return json((await getCatalogue(env,initial)).items);
     if (path==='/api/items' && request.method==='POST') return await saveListings([await readForm(request)],env,initial);
@@ -234,7 +209,7 @@ export async function handleInventory(request, env, initial) {
     }
     reject(404,'Unknown route.');
   } catch (error) {
-    if (error instanceof FormError) return json({error:error.message},error.status);
+    if (error instanceof FormError) return json({error:error.message},error.status,error.headers);
     console.error('Inventory operation failed:', error.name, error.message);
     return json({error:'Inventory could not be loaded or saved. Please try again.'},500);
   }

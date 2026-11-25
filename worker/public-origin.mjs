@@ -1,20 +1,9 @@
-// These are the public storefronts served by the Vercel gateway. Do not trust
-// arbitrary forwarded hosts: this allowlist also controls payment return URLs.
-const publicStorefrontOrigins = new Set([
-  'https://lemrix.vercel.app',
-  'https://lemrix-surf.vercel.app',
-]);
-
+// The server adapter validates the public host before constructing Request.
+// Unsafe browser requests must come from that exact origin.
 function requireTrustedOrigin(request, url = new URL(request.url)) {
   const origin = request.headers.get('Origin');
-  if (origin !== url.origin && !publicStorefrontOrigins.has(origin)) {
+  if (origin !== url.origin) {
     reject(403, 'Invalid request origin.');
   }
   return origin;
-}
-
-function ownerRequestOrigin(request) {
-  const url = new URL(request.url);
-  const origin = request.headers.get('Origin') || url.origin;
-  return origin === url.origin || publicStorefrontOrigins.has(origin) ? origin : null;
 }

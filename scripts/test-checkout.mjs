@@ -1,21 +1,29 @@
 import assert from 'node:assert/strict';
-import {randomUUID, createHmac} from 'node:crypto';
+import {randomUUID, createHmac, pbkdf2Sync} from 'node:crypto';
 import {runInNewContext} from 'node:vm';
 import worker from '../dist/server/index.js';
 
 const origin = 'https://shop.example';
 const bucket = new Map();
 let revision = 0;
-const env = {ADMIN_EMAIL:'owner@example.com', BUCKET:{
+const fixturePassword = 'fixture-password';
+const salt = Buffer.from('native-checkout-fixture-salt');
+const env = {
+  ADMIN_PASSWORD_HASH:'pbkdf2-sha256$600000$' + salt.toString('hex') + '$' + pbkdf2Sync(fixturePassword,salt,600000,32,'sha256').toString('hex'),
+  SESSION_SECRET:'fixture-native-session-secret', CLIENT_IP:'198.51.100.30', BUCKET:{
   async get(key) {
     const entry = bucket.get(key);
-    return entry && {etag:entry.etag, json:async () => JSON.parse(entry.value)};
+    return entry && {...entry, json:async () => JSON.parse(entry.value)};
   },
-  async put(key, value, {onlyIf}) {
+  async head(key) { return bucket.get(key); },
+  async delete(key) { bucket.delete(key); },
+  async put(key, value, options={}) {
     const entry = bucket.get(key);
-    if (entry ? onlyIf.get('If-Match') !== '"' + entry.etag + '"' : !onlyIf.has('If-None-Match')) return null;
+    const match = options.onlyIf?.get('If-Match');
+    if (match && (!entry || match !== '"' + entry.etag + '"')) return null;
+    if (options.onlyIf?.get('If-None-Match')==='*' && entry) return null;
     const etag = String(++revision);
-    bucket.set(key, {etag, value});
+    bucket.set(key, {...options, etag, value});
     return {etag};
   }
 }};
@@ -60,11 +68,14 @@ globalThis.fetch = async (url, {headers, body}) => {
   if (session && expire) session.status = 'expired';
   return Response.json(session || {}, {status:session ? 200 : 404});
 };
-const request = (path, payload, extra={}) => worker.fetch(new Request(origin+path,{
-  method:payload ? 'POST' : 'GET',
-  headers:{Origin:origin,'Content-Type':'application/json','oai-authenticated-user-email':env.ADMIN_EMAIL,...extra},
-  body:payload && JSON.stringify(payload)
-}),env);
+let adminCookie = '';
+const request = (path, payload, extra={}) => {
+  const headers = new Headers({Origin:origin,'Content-Type':'application/json',Cookie:adminCookie});
+  for (const [name,value] of Object.entries(extra)) headers.set(name,value);
+  return worker.fetch(new Request(origin+path,{
+    method:payload ? 'POST' : 'GET', headers, body:payload && JSON.stringify(payload)
+  }),env);
+};
 const attempt = () => ({itemId:'soft-landing', copy:1, expectedCents:2050, attempt:randomUUID(), started:Math.floor(Date.now()/1000)});
 const shop = async (extra) => {
   const text = await (await request('/shop/catalogue.js',null,extra)).text();
@@ -78,14 +89,17 @@ async function event(session, signed=true,type='checkout.session.completed') {
 }
 assert.equal((await request('/api/checkout',attempt())).status,503);
 env.STRIPE_SECRET_KEY='sk_test_mock'; env.STRIPE_WEBHOOK_SECRET='fixture';
-assert.equal((await request('/api/checkout',attempt(),{'oai-authenticated-user-email':'guest@example.com'})).status,403);
+assert.equal((await request('/api/checkout',attempt(),{'oai-authenticated-user-email':'owner@example.com'})).status,403);
+const login = await request('/api/login',{username:'Lemrix',password:fixturePassword});
+assert.equal(login.status,200);
+adminCookie = login.headers.get('Set-Cookie').split(';')[0];
 assert.equal((await request('/api/checkout',{...attempt(),expectedCents:1})).status,409);
 assert.equal((await request('/api/checkout',{...attempt(),copy:27})).status,409);
 assert.equal((await request('/api/checkout',{...attempt(),itemId:'moon-run'})).status,409);
 assert.equal((await request('/api/checkout',attempt())).status,200);
 mostRecent.status='complete'; mostRecent.payment_status='paid';
 assert.equal((await (await request('/api/checkout/status',{session:mostRecent.id})).json()).status,'test-paid');
-assert.equal(bucket.size,0);
+assert.equal(bucket.has('store/v1/catalogue.json'),false, 'Test checkout cannot change live stock.');
 const rows=await shop();
 const product=rows.find(p=>p.id==='soft-landing');
 product.quantity=2; product.revision=1;

@@ -1,17 +1,23 @@
 import assert from 'node:assert/strict';
+import {pbkdf2Sync} from 'node:crypto';
 import worker from '../dist/server/index.js';
 
 const records = new Map();
 let revision = 0;
+const fixturePassword = 'fixture-password';
+const salt = Buffer.from('native-editor-fixture-salt');
 const env = {
-  ADMIN_EMAIL:'owner@example.com', ADMIN_PASSWORD:'fixture-password', SESSION_SECRET:'fixture-session',
+  ADMIN_PASSWORD_HASH:'pbkdf2-sha256$600000$' + salt.toString('hex') + '$' + pbkdf2Sync(fixturePassword,salt,600000,32,'sha256').toString('hex'),
+  SESSION_SECRET:'fixture-native-session-secret', CLIENT_IP:'198.51.100.20',
   BUCKET: {
     head:async key=>records.get(key),
     get:async key=>records.get(key),
     delete:async key=>records.delete(key),
     async put(key, data, options={}) {
       const previous=records.get(key);
-      if (options.onlyIf && previous && options.onlyIf.get('If-Match') !== '"'+previous.etag+'"') return null;
+      const match=options.onlyIf?.get('If-Match');
+      if (match && (!previous || match !== '"'+previous.etag+'"')) return null;
+      if (options.onlyIf?.get('If-None-Match')==='*' && previous) return null;
       const entry={...options,etag:String(++revision),json:async()=>JSON.parse(data)};
       records.set(key,entry);
       return entry;
@@ -22,13 +28,13 @@ const origin='https://shop.example';
 let cookie='';
 function call(path,body,headers={}) {
   return worker.fetch(new Request(origin+path,{
-    method:body?'POST':'GET', headers:{origin,cookie,'oai-authenticated-user-email':env.ADMIN_EMAIL,...headers},
+    method:body?'POST':'GET', headers:{origin,cookie,...headers},
     body:body && JSON.stringify(body)
   }),env);
 }
-const credentials={username:'Lemrix',password:env.ADMIN_PASSWORD};
+const credentials={username:'Lemrix',password:fixturePassword};
 assert.equal((await call('/api/items/push',{changes:[]})).status,401);
-assert.equal((await call('/api/login',credentials,{'oai-authenticated-user-email':'guest@example.com'})).status,403);
+assert.equal((await call('/api/login',{...credentials,password:'incorrect'},{'oai-authenticated-user-email':'owner@example.com'})).status,401);
 const login=await call('/api/login',credentials);
 assert.equal(login.status,200);
 cookie=login.headers.get('set-cookie').split(';')[0];
@@ -77,4 +83,4 @@ const pack={...listing,id:'a'.repeat(32),category:'Packs',card:{productType:'box
 assert.equal((await push([pack])).status,200);
 assert.equal((await call('/api/logout',{})).status,200);
 assert.equal((await call('/api/items')).status,401);
-console.log('Verified owner login, session expiry on logout, batch publication, conflict rollback and cross-origin rejection.');
+console.log('Verified native password login, session revocation on logout, batch publication, conflict rollback and cross-origin rejection.');
