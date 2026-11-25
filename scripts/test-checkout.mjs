@@ -32,11 +32,9 @@ let mostRecent;
 globalThis.fetch = async (url, {headers, body}) => {
   const path = new URL(url).pathname;
   if (path === '/v1/checkout/sessions') {
-    // Endive rejects the removed payment_method_types create parameter with
-    // HTTP 400. Keep this mock aligned with the pinned API's request contract.
-    assert.equal(body.has('payment_method_types[0]'), false);
-    assert.equal(body.get('allowed_payment_method_types[0]'), 'card');
-    assert.equal(headers['Idempotency-Key'], 'lemrix-endive-' + body.get('metadata[attempt]'));
+    assert.equal(headers['Stripe-Version'], '2024-06-20');
+    assert.equal(body.get('payment_method_types[0]'), 'card');
+    assert.equal(headers['Idempotency-Key'], 'lemrix-card-' + body.get('metadata[attempt]'));
     const multiple = body.has('line_items[1][quantity]');
     const unit = index => Number(body.get('line_items['+index+'][price_data][unit_amount]'));
     assert.equal(body.get('line_items[0][price_data][currency]'), 'aud');
@@ -89,7 +87,8 @@ async function event(session, signed=true,type='checkout.session.completed') {
 }
 assert.equal((await request('/api/checkout',attempt())).status,503);
 env.STRIPE_SECRET_KEY='sk_test_mock'; env.STRIPE_WEBHOOK_SECRET='fixture';
-assert.equal((await request('/api/checkout',attempt(),{'oai-authenticated-user-email':'owner@example.com'})).status,403);
+assert.equal((await shop()).find(p => p.id === 'soft-landing').canBuy, true);
+assert.equal((await request('/api/checkout',attempt())).status,200);
 const login = await request('/api/login',{username:'Lemrix',password:fixturePassword});
 assert.equal(login.status,200);
 adminCookie = login.headers.get('Set-Cookie').split(';')[0];
@@ -110,7 +109,7 @@ const first=attempt(), second=attempt();
 const responses=await Promise.all([request('/api/checkout',first),request('/api/checkout',second)]);
 assert.deepEqual(responses.map(r=>r.status).sort(),[200,409]);
 const winner=responses[0].status===200 ? first : second;
-const selected=sessions.get(attempts.get('lemrix-endive-'+winner.attempt));
+const selected=sessions.get(attempts.get('lemrix-card-'+winner.attempt));
 assert.equal((await request('/api/checkout',winner)).status,200);
 assert.equal((await shop())[0].copies[1].canBuy,false);
 assert.equal((await shop())[0].checkoutHolds,undefined);
@@ -223,4 +222,4 @@ try {
   globalThis.fetch = stripeFetch;
   console.error = originalConsoleError;
 }
-console.log('Verified Endive payment-method parameters and sanitized Stripe failure diagnostics without stock changes.');
+console.log('Verified pinned Stripe API payment-method parameters and sanitized Stripe failure diagnostics without stock changes.');

@@ -390,6 +390,7 @@ function renderDetail(item) {
   if (item.collection !== 'pre-orders' && item.checkoutMode === 'live' && item.quantity != null) byId('availability').textContent = item.canBuy ? 'Available to order. Prices are in Australian dollars.' : 'Currently unavailable.';
   const defaultAvailability=byId('availability').textContent;
   if(item.availability) byId('availability').textContent=item.availability;
+  if (item.reserved) byId('availability').textContent = 'Reserved in another checkout. Refresh later to check availability.';
   offerCopies(item);
   byId('detail-description').textContent = item.description;
   byId('detail-notes').textContent = item.notes;

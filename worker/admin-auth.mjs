@@ -52,10 +52,6 @@ async function sessionId(request, env) {
   return {id, expires};
 }
 
-async function owner(request, env) {
-  return Boolean(await sessionId(request, env));
-}
-
 async function incrementLoginLimit(env, key, maximum) {
   for (let attempt = 0; attempt < 32; attempt++) {
     const object = await env.BUCKET.get(key);

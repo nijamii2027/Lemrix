@@ -179,8 +179,7 @@ export async function handleInventory(request, env, initial) {
           } catch { /* Display conservative availability until Stripe can be reached. */ }
         }
       }
-      const shopperMode = mode === 'test' && !await owner(request, env) ? 'off' : mode;
-      return new Response('const products = '+JSON.stringify(items.map(item => forShop(item, shopperMode)))+';', {headers:{...errors,'Content-Type':'application/javascript; charset=utf-8'}});
+      return new Response('const products = '+JSON.stringify(items.map(item => forShop(item, mode)))+';', {headers:{...errors,'Content-Type':'application/javascript; charset=utf-8'}});
     }
     if (image && (request.method==='GET' || request.method==='HEAD')) {
       const object=await env.BUCKET[request.method==='HEAD'?'head':'get'](imagePrefix+image[1]);

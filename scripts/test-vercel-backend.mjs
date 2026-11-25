@@ -122,7 +122,7 @@ assert.match((await missing.json()).error, /live inventory.*unavailable/);
 await env.BUCKET.put('store/v1/catalogue.json', JSON.stringify([]));
 assert.deepEqual(Array.from(runInNewContext((await (await call('/shop/catalogue.js')).text()) + ';products')), [], 'An empty real catalogue remains empty');
 
-// Test checkout uses the native admin session, and return URLs use the exact
+// Guests and staff can use checkout, and return URLs use the exact
 // current origin. This mock cannot create external orders or take payments.
 const finalCookie = cookieFrom(await call('/api/login', credentials));
 env.STRIPE_SECRET_KEY = 'sk_test_fixture';
@@ -136,17 +136,17 @@ globalThis.fetch = async (url, options) => {
   stripeCalls++;
   assert.match(options.body.get('success_url'), /^https:\/\/lemrix\.vercel\.app\/shop\/\?checkout=/);
   assert.match(options.body.get('cancel_url'), /^https:\/\/lemrix\.vercel\.app\/shop\/\?checkout=cancelled/);
-  assert.equal(options.body.get('allowed_payment_method_types[0]'), 'card');
-  assert.equal(options.body.has('payment_method_types[0]'), false);
+  assert.equal(options.body.get('payment_method_types[0]'), 'card');
+  assert.equal(options.headers['Stripe-Version'], '2024-06-20');
   return Response.json({id:'cs_test_fixture123456789', status:'open', livemode:false,
     url:'https://checkout.stripe.com/c/pay/cs_test_fixture123456789'});
 };
 try {
   const order = {itemId:'fixture-pack', copy:null, expectedCents:850, attempt:randomUUID(), started:Math.floor(Date.now() / 1000)};
-  assert.equal((await call('/api/checkout', order, forgedIdentity)).status, 403);
+  assert.equal((await call('/api/checkout', order)).status, 200);
   assert.equal((await call('/api/checkout', order, {Cookie:finalCookie})).status, 200);
   assert.equal((await call('/api/checkout', order, {Cookie:finalCookie, Origin:'https://lemrix-surf.vercel.app'})).status, 403);
-  assert.equal(stripeCalls, 1);
+  assert.equal(stripeCalls, 2);
   assert.equal((await records.get('store/v1/catalogue.json').json())[0].quantity, 2);
 } finally { globalThis.fetch = originalFetch; }
 

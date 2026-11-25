@@ -17,11 +17,12 @@ function forShop(item, mode) {
   }));
   publicItem.canBuy = eligible && (item.copies ? publicItem.copies.some(c => c.canBuy) : item.cents >= 50);
   publicItem.checkoutMode = mode;
+  if (mode === 'live' && available === 0 && checkoutHolds.length) publicItem.reserved = true;
   if (Number.isInteger(item.quantity) && !demo) publicItem.quantity = available;
   return publicItem;
 }
 async function stripeRequest(env, path, form, requestId) {
-  const headers = {Authorization:'Bearer ' + env.STRIPE_SECRET_KEY, 'Stripe-Version':'2026-11-18.endive'};
+  const headers = {Authorization:'Bearer ' + env.STRIPE_SECRET_KEY, 'Stripe-Version':'2024-06-20'};
   if (requestId) headers['Idempotency-Key'] = requestId;
   const response = await fetch('https://api.stripe.com/v1/' + path, {
     method: form ? 'POST' : 'GET', headers, body: form
@@ -33,6 +34,7 @@ async function stripeRequest(env, path, form, requestId) {
     // Keep diagnostics useful without logging credentials, customer data or raw messages.
     console.error('Stripe API request failed', {
       status: response.status,
+      field: ['version', 'expires_at', 'shipping_rate', 'payment method', 'activate', 'capabilit', 'currency', 'business', 'account', 'live mode'].find(term => error?.message?.toLowerCase().includes(term)),
       type: safe(error?.type, /^[a-z_]{1,80}$/),
       code: safe(error?.code, /^[a-z0-9_]{1,80}$/),
       param: safe(error?.param, /^[a-zA-Z0-9_.\[\]]{1,160}$/),
@@ -126,7 +128,6 @@ function priceOrder(items,lines,mode) {
 async function startCheckout(env, initial, body, origin, request) {
   const mode = checkoutMode(env);
   if (mode === 'off') reject(503, 'Checkout is not connected yet.');
-  if (mode === 'test' && !await owner(request, env)) reject(403, 'Test checkout is available to the store owner.');
   if (!/^[0-9a-f-]{36}$/.test(body.attempt || '')) reject(400, 'Invalid checkout attempt.');
   const lines = checkoutLines(body);
   let {items} = await getCatalogue(env, initial);
@@ -148,7 +149,7 @@ async function startCheckout(env, initial, body, origin, request) {
   const order = priceOrder(items,lines,mode);
   const returnHash = body.lines ? '#cart' : '#item/' + encodeURIComponent(order[0].item.id);
   const details = new URLSearchParams({
-    mode:'payment', 'allowed_payment_method_types[0]':'card',
+    mode:'payment', 'payment_method_types[0]':'card',
     'shipping_address_collection[allowed_countries][0]':'AU', 'metadata[store]':checkoutStore,
     'metadata[item_id]':order[0].item.id, 'metadata[attempt]':body.attempt,
     'success_url':origin + '/shop/?checkout={CHECKOUT_SESSION_ID}&attempt=' + body.attempt + returnHash,
@@ -174,7 +175,7 @@ async function startCheckout(env, initial, body, origin, request) {
   if (!Number.isSafeInteger(body.started) || Math.abs(Date.now()/1000 - body.started) > 600) reject(400, 'Start a new checkout.');
   details.set('expires_at', String(body.started + 45 * 60));
   // A new request schema must not replay failures cached under the retired schema.
-  const session = await stripeRequest(env, 'checkout/sessions', details, 'lemrix-endive-' + body.attempt);
+  const session = await stripeRequest(env, 'checkout/sessions', details, 'lemrix-card-' + body.attempt);
   if (!stripeSessionId.test(session.id) || session.status !== 'open' || !session.url ||
       new URL(session.url).origin !== 'https://checkout.stripe.com' || session.livemode !== (mode === 'live'))
     reject(502, 'Stripe checkout is unavailable.');
