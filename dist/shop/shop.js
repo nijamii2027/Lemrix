@@ -26,7 +26,9 @@ function listingPrice(item) {
   return 'From ' + price(Math.min(...item.copies.map(copy => copy.cents)));
 }
 function itemFormat(item) {
-  return item.format + (Number.isInteger(item.quantity) ? (item.quantity ? ' · ' + item.quantity + ' in stock' : ' · Sold out') : '') + (item.collection === 'pre-orders' ? ' · Pre-order preview' : '');
+  const stock = item.reserved ? ' · Temporarily reserved'
+    : Number.isInteger(item.quantity) ? (item.quantity ? ' · ' + item.quantity + ' in stock' : ' · Sold out') : '';
+  return item.format + stock + (item.collection === 'pre-orders' ? ' · Pre-order preview' : '');
 }
 const imagePath = item => item.image || 'art/' + item.id + '.webp';
 const detailHash = item => '#item/' + item.id;

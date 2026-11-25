@@ -77,7 +77,13 @@ window.LemrixCart = (() => {
       const info=document.createElement('div');
       const meta=listing && item.copies ? 'Copy '+String.fromCharCode(65+line.copy)+' · '+listing.condition : item?.format;
       info.append(link,text('p',meta||'Removed from the catalogue.'));
-      if(unavailable) info.append(text('small',item?.collection==='pre-orders'?'Pre-order preview':item?.checkoutMode==='off'||!item?.checkoutMode?'Checkout unavailable':'Unavailable to order'));
+      if (unavailable) {
+        const reason = item?.collection === 'pre-orders' ? 'Pre-order preview'
+          : item?.reserved ? 'Temporarily reserved'
+          : !item?.checkoutMode || item.checkoutMode === 'off' ? 'Checkout unavailable'
+          : 'Unavailable to order';
+        info.append(text('small', reason));
+      }
       const edit=document.createElement('div'); edit.className='cart-controls';
       if(listing && line.copy===null){
         const group=document.createElement('div'); group.className='cart-stepper';
