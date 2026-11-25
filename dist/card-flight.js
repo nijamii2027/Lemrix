@@ -3,7 +3,7 @@
 (() => {
   'use strict';
   const fields = [...document.querySelectorAll('.green-scene .cards, .tv-scene .cards')].map((layer, index) => ({
-    layer,
+    layer, overGrass: !!layer.closest('.green-scene'),
     cards: [...layer.querySelectorAll('.flight-card')].map((image, i) => ({
       image, index: i, rate: (.61 + i % 4 * .14) * (index === 1 ? 1.12 : 1),
       phase: i * 2.399 + index * .7
@@ -22,6 +22,13 @@
       const y = field.height * (.47 + .36 * Math.cos(1.72*t + index) + .09 * Math.sin(2*t));
       const scale = .72 + .29 * Math.cos(t + index);
       const angle = t*58 + 47*Math.sin(2*t);
+      if (field.overGrass) {
+        // Choose depth from the same scale curve at the centre of each flip.
+        // The plane can then change only when the card turns edge-on.
+        const faceOnTime = Math.round(1.5*t/Math.PI) * Math.PI/1.5;
+        const plane = Math.cos(faceOnTime + index) > 0 ? '4' : '1';
+        if (image.style.zIndex !== plane) image.style.zIndex = plane;
+      }
       image.style.transform = 'translate3d(' + x.toFixed(3) + 'px,' + y.toFixed(3) +
         'px,0) rotate(' + angle.toFixed(3) + 'deg) scale(' +
         (scale*Math.cos(1.5*t)).toFixed(5) + ',' + scale.toFixed(5) + ')';

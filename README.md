@@ -1,6 +1,6 @@
 # Lemrix TCG
 
-The illustrated storefront source matches Lemrix TCG publication 25 (source commit `868ece8ed14734868179f3393b0d1a16fd5f6265`). It includes the landing page, After Hours, shop, card photo tools, staff editor, rewards and checkout.
+The illustrated storefront source matches Lemrix TCG publication 26 (source commit `159d6e5244b8740b66da9da1d9816a99abf51fc9`). It includes the landing page, After Hours, shop, card photo tools, staff editor, rewards and checkout.
 
 ## Vercel
 

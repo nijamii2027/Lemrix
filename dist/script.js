@@ -200,9 +200,10 @@
       copy.style.opacity=phase(t,1.68,2.34);
       copy.style.translate='0 '+(1-easeOut(phase(t,1.68,2.34)))*48+'px';
       const dash=t>=2.51;
-      const show=t>=.26 && (t<2.168 || (dash && t<fallEnd-.035));
+      const impactHandoff=2.168;
+      const show=t>=.26 && (t<impactHandoff || (dash && t<fallEnd-.035));
       visible(actor,show);
-      visible(flat,t>=2.13 && t<2.33);
+      visible(flat,t>=impactHandoff && t<2.33);
       visible(watcher,t>=fallEnd-.035);
       if(t>=fallEnd-.035) paper?.warm();
       if(t<fallEnd){watchTime=0;sprite(watchLoop,0,9,6);}
@@ -211,7 +212,7 @@
         if(!dash){
           if(t<.89)n=Math.round(16*phase(t,.26,.87));
           else if(t<2.06)n=17+Math.round(16*phase(t,.89,2.02));
-          else n=34+Math.round(3*phase(t,2.06,2.168));
+          else n=34+Math.round(3*phase(t,2.06,impactHandoff));
           const travel=smooth(phase(t,.26,2.02));
           x=lerp(home.x+size/2,landing.x,travel)+Math.sin(Math.PI*travel)*size*.2;
           y=lerp(home.y+size*.9625,landing.y,travel)-Math.sin(Math.PI*travel)*h*.17;
@@ -227,6 +228,9 @@
           else n=42+Math.round(18*smooth(phase(t,3.24,4.12)));
           angle=d<1?-6:8*Math.sin(brake*Math.PI);
         }
+        // Lift-off and the seated turn alternate original drawings with ghosted
+        // blends. Hold each drawing until the next one while the actor keeps moving.
+        if(n<16 || (n>42 && n<60)) n-=n%2;
         if(n!==lastPose){sprite(actor,n,8,8);lastPose=n;}
         move(actor,x-size/2,y-size*.9625,'rotate('+angle+'deg) scale('+sx+','+sy+')');
         actor.style.opacity=1;
