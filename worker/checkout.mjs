@@ -113,7 +113,7 @@ function priceOrder(items,lines,mode) {
 async function startCheckout(env, initial, body, origin, request) {
   const mode = checkoutMode(env);
   if (mode === 'off') reject(503, 'Checkout is not connected yet.');
-  if (mode === 'test' && !owner(request, env)) reject(403, 'Test checkout is available to the store owner.');
+  if (mode === 'test' && !await owner(request, env)) reject(403, 'Test checkout is available to the store owner.');
   if (!/^[0-9a-f-]{36}$/.test(body.attempt || '')) reject(400, 'Invalid checkout attempt.');
   const lines = checkoutLines(body);
   let {items} = await getCatalogue(env, initial);
@@ -221,9 +221,9 @@ async function stripeEvent(request, env, initial) {
 async function checkoutRoute(request, env, initial, url) {
   if (request.method !== 'POST') reject(405, 'Use POST for checkout.');
   if (url.pathname === '/api/stripe/webhook') return stripeEvent(request, env, initial);
-  if (request.headers.get('Origin') !== url.origin) reject(403, 'Invalid checkout origin.');
+  const publicOrigin = requireTrustedOrigin(request, url);
   const body = await readForm(request);
-  if (url.pathname === '/api/checkout') return startCheckout(env, initial, body, url.origin, request);
+  if (url.pathname === '/api/checkout') return startCheckout(env, initial, body, publicOrigin, request);
   if (url.pathname === '/api/checkout/cancel') return cancelCheckout(env, initial, body);
   if (!stripeSessionId.test(body.session || '')) reject(400, 'Invalid checkout reference.');
   if (checkoutMode(env) === 'off') reject(503, 'Checkout is unavailable.');

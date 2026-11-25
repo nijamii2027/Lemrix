@@ -7,36 +7,43 @@
   "redirects": [
     {
       "source": "/shop",
-      "destination": "https://lemrix-tcg-illustrated.beefybag2.chatgpt.site/shop/",
-      "permanent": false
-    },
-    {
-      "source": "/shop/",
-      "destination": "https://lemrix-tcg-illustrated.beefybag2.chatgpt.site/shop/",
+      "destination": "/shop/",
       "permanent": false
     },
     {
       "source": "/shop/index.html",
-      "destination": "https://lemrix-tcg-illustrated.beefybag2.chatgpt.site/shop/",
+      "destination": "/shop/",
       "permanent": false
     },
     {
       "source": "/admin",
-      "destination": "https://lemrix-tcg-illustrated.beefybag2.chatgpt.site/shop/#account",
+      "destination": "/shop/#account",
       "permanent": false
     },
     {
       "source": "/admin/",
-      "destination": "https://lemrix-tcg-illustrated.beefybag2.chatgpt.site/shop/#account",
+      "destination": "/shop/#account",
       "permanent": false
     },
     {
       "source": "/admin/index.html",
-      "destination": "https://lemrix-tcg-illustrated.beefybag2.chatgpt.site/shop/#account",
+      "destination": "/shop/#account",
       "permanent": false
     }
   ],
   "rewrites": [
+    {
+      "source": "/shop/catalogue.js",
+      "destination": "/api/gateway?resource=catalogue"
+    },
+    {
+      "source": "/media/:id",
+      "destination": "/api/gateway?resource=media&id=:id"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/gateway?resource=api&path=:path"
+    },
     {
       "source": "/after-hours",
       "destination": "/after-hours/index.html"

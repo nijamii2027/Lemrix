@@ -40,6 +40,8 @@ await mkdir(join(client,'admin'),{recursive:true});
 await writeFile(join(client,'admin/index.html'),
   '<!doctype html><html lang="en"><meta charset="utf-8"><title>Lemrix shop</title><meta http-equiv="refresh" content="0;url=/shop/#account"><a href="/shop/#account">Open shop account</a></html>');
 const api = await readFile(join(project,'worker/inventory.mjs'),'utf8');
+const publicOrigin = await readFile(join(project,'worker/public-origin.mjs'),'utf8');
+const ownerBridge = await readFile(join(project,'worker/owner-bridge.mjs'),'utf8');
 const customer = await readFile(join(project,'worker/customer.mjs'),'utf8');
 const checkout = await readFile(join(project,'worker/checkout.mjs'),'utf8');
 const rewards = await readFile(join(project,'worker/rewards.mjs'),'utf8');
@@ -51,7 +53,7 @@ for (const id of ['hill-club', 'last-showing', 'after-hours']) {
 }
 const router = await readFile(join(project,'worker/route.mjs'),'utf8');
 await writeFile(join(server,'index.js'),
-  [api, customer, rewards, checkout, 'const rewardArtwork = '+JSON.stringify(prints)+';', 'const initialProducts = ' + JSON.stringify(initial) + ';',
+  [publicOrigin, ownerBridge, api, customer, rewards, checkout, 'const rewardArtwork = '+JSON.stringify(prints)+';', 'const initialProducts = ' + JSON.stringify(initial) + ';',
    'const fallback = ' + JSON.stringify(pages) + ';',router].join('\n'));
 await mkdir(join(dist,'.openai'),{recursive:true});
 await copyFile(join(project,'.openai/hosting.json'), join(dist,'.openai/hosting.json'));

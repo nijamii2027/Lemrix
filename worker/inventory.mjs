@@ -53,9 +53,8 @@ function recognizedImage(data) {
   if (decoder.decode(data.slice(0,4)) === 'RIFF' && decoder.decode(data.slice(8,12)) === 'WEBP') return 'image/webp';
   return null;
 }
-function owner(request, env) {
-  const email = request.headers.get('oai-authenticated-user-email')?.trim().toLowerCase();
-  return Boolean(email && env.ADMIN_EMAIL && email === env.ADMIN_EMAIL.trim().toLowerCase());
+async function owner(request, env) {
+  return trustedSiteOwner(request, env) || Boolean(await readOwnerProof(request, env));
 }
 async function sessionSignature(env, email, id) {
   const key = await crypto.subtle.importKey('raw', encoder.encode(env.SESSION_SECRET), {name:'HMAC', hash:'SHA-256'}, false, ['sign']);
@@ -174,6 +173,7 @@ export async function handleInventory(request, env, initial) {
   if (!path.startsWith('/api/') && path!=='/shop/catalogue.js' && !image) return null;
   try {
     if (!env.BUCKET) reject(503,'Inventory storage is unavailable.');
+    if (path.startsWith('/api/owner-bridge/')) return await ownerBridgeRoute(request,env,url);
     if (path==='/api/rewards'||path.startsWith('/api/rewards/')) return await rewardsRoute(request,env,url);
     if (path.startsWith('/api/customer/')) return await customerRoute(request,env,url);
     if (['/api/checkout','/api/checkout/status','/api/checkout/cancel','/api/stripe/webhook'].includes(path)) {
@@ -191,7 +191,7 @@ export async function handleInventory(request, env, initial) {
           } catch { /* Display conservative availability until Stripe can be reached. */ }
         }
       }
-      const shopperMode = mode === 'test' && !owner(request, env) ? 'off' : mode;
+      const shopperMode = mode === 'test' && !await owner(request, env) ? 'off' : mode;
       return new Response('const products = '+JSON.stringify(items.map(item => forShop(item, shopperMode)))+';', {headers:{...errors,'Content-Type':'application/javascript; charset=utf-8'}});
     }
     if (image && (request.method==='GET' || request.method==='HEAD')) {
@@ -201,8 +201,8 @@ export async function handleInventory(request, env, initial) {
     }
     if (!path.startsWith('/api/')) reject(405,'Method unavailable.');
     if (!env.ADMIN_EMAIL || !env.ADMIN_PASSWORD || !env.SESSION_SECRET) reject(503,'Admin credentials have not been configured.');
-    if (!owner(request, env)) reject(403,'Sign in with the site owner’s ChatGPT account, then enter your shop password.');
-    if (request.method!=='GET' && request.headers.get('Origin')!==url.origin) reject(403,'Invalid request origin.');
+    if (!await owner(request, env)) reject(403,'Sign in with the site owner’s ChatGPT account, then enter your shop password.');
+    if (request.method!=='GET') requireTrustedOrigin(request,url);
     if (path==='/api/login' && request.method==='POST') {
       const body=await readForm(request);
       if (body.username!=='Lemrix' || !isText(body.password,256) || body.password!==env.ADMIN_PASSWORD) reject(401,'Incorrect login');
@@ -215,9 +215,12 @@ export async function handleInventory(request, env, initial) {
     if (!session) reject(401,'Sign in required');
     if (path==='/api/account' && request.method==='GET') return json({username:'Lemrix',expires:session.expires});
     if ((path==='/api/logout' || path==='/api/logout-all') && request.method==='POST') {
+      await revokeOwnerProof(request,env);
       if (path==='/api/logout-all') await env.BUCKET.put('store/v1/admin-generation','1',{customMetadata:{generation:randomId()}});
       await env.BUCKET.delete(sessionPrefix+session.id);
-      return json({ok:true},200,{'Set-Cookie':cookie('',0)});
+      const response = json({ok:true},200,{'Set-Cookie':cookie('',0)});
+      response.headers.append('Set-Cookie',ownerProofSetCookie('',0));
+      return response;
     }
     if (path==='/api/items' && request.method==='GET') return json((await getCatalogue(env,initial)).items);
     if (path==='/api/items' && request.method==='POST') return await saveListings([await readForm(request)],env,initial);

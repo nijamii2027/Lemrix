@@ -53,7 +53,7 @@ async function sessionPath(raw) {
 async function customerRoute(request,env,url) {
   const action=url.pathname.slice('/api/customer/'.length);
   const method=request.method;
-  if(method==='POST' && request.headers.get('Origin')!==url.origin) reject(403,'Invalid request origin.');
+  if(method==='POST') requireTrustedOrigin(request,url);
   const raw=readCookie(request,customerCookie);
   const sessionKey=raw && /^[a-f0-9]{64}$/.test(raw) ? await sessionPath(raw) : null;
   if(action==='session' && method==='GET') {

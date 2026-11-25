@@ -35,7 +35,7 @@ function rewardView(wallet){
 }
 async function rewardsRoute(request,env,url) {
   const action=url.pathname.slice('/api/rewards'.length);
-  if(request.method==='POST' && request.headers.get('Origin')!==url.origin)reject(403,'Invalid request origin.');
+  if(request.method==='POST')requireTrustedOrigin(request,url);
   if(request.method==='POST' && (action==='/join'||action==='/recover')){
     let wallet;
     if(action==='/recover'){
