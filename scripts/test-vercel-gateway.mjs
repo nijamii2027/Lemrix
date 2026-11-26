@@ -99,13 +99,18 @@ try {
       [api('checkout/status'), 'POST', '/api/checkout/status'],
       [api('checkout/tracking'), 'POST', '/api/checkout/tracking'],
     ]) {
+      const configBefore = configCalls.length;
       const result = await call(path, method === 'POST' ? post({fixture:true}) : {});
       assert.equal(result.status, 200);
       assert.equal(calls.at(-1).request.url, ORIGIN + pathname);
       assert.equal(calls.at(-1).request.method, method);
       assert.equal(calls.at(-1).env.BUCKET, bucket);
       assert.equal(calls.at(-1).env.REQUIRE_STORED_CATALOGUE, true);
-      assert.equal(configCalls.at(-1).storage, bucket);
+      if (pathname.startsWith('/media/')) assert.equal(configCalls.length, configBefore, 'Media bypasses unrelated runtime config');
+      else {
+        assert.equal(configCalls.length, configBefore + 1);
+        assert.equal(configCalls.at(-1).storage, bucket);
+      }
       privateResponse(result);
     }
   });
