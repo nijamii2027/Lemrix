@@ -78,7 +78,9 @@ export function createGateway({env = process.env, app = application, bucket, con
         if (!env.BLOB_READ_WRITE_TOKEN && !env.BLOB_STORE_ID) fail(503, 'Shop storage is temporarily unavailable.');
         storage = createBlobBucket({token:env.BLOB_READ_WRITE_TOKEN, storeId:env.BLOB_STORE_ID});
       }
-      const config = await configLoader(storage, env);
+      // Immutable listing images only need the storage bucket; avoid a private
+      // runtime configuration read on every image request.
+      const config = selected.pathname.startsWith('/media/') ? {} : await configLoader(storage, env);
       const headers = new Headers();
       const incomingCookies = typeof request.headers.cookie === 'string' ? request.headers.cookie : '';
       const cookies = incomingCookies.split(/;\s*/).filter(part => COOKIE_NAMES.has(part.split('=')[0])).join('; ');
