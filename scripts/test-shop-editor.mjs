@@ -120,16 +120,14 @@ assert.equal((await projection.json()).find(item=>item.id===custom.id).canBuy,fa
 const held=stored.find(item=>item.id===newId);
 held.checkoutHolds=[{provider:'square',expires:Math.floor(Date.now()/1000)+600}];
 await env.BUCKET.put(catalogueKey,JSON.stringify(stored));
-assert.equal((await push([remove])).status,409,'Active checkout holds prevent removal');
 assert.equal((await push([{...change(held),collection:'pre-orders',preorderDispatch:'2099-07-01'}])).status,409,'Cannot change dispatch terms for held units');
-held.checkoutHolds=[];
-await env.BUCKET.put(catalogueKey,JSON.stringify(stored));
-assert.equal((await push([remove])).status,200);
+assert.equal((await push([remove])).status,200,'Removal archives a listing even with an active checkout');
 assert.ok(!(await items()).some(item=>item.id===newId),'Archived listing is absent from the editor');
 const afterRemoval=await (await call('/shop/catalogue.js',undefined,{Accept:'application/json'})).json();
 assert.ok(!afterRemoval.some(item=>item.id===newId),'Archived listing is absent from the shop');
 const archived=(await (await env.BUCKET.get(catalogueKey)).json()).find(item=>item.id===newId);
 assert.equal(archived.archived,true);
+assert.deepEqual(archived.checkoutHolds,held.checkoutHolds,'Removal preserves active checkout holds');
 assert.equal(archived.revision,published.revision+1);
 assert.deepEqual([archived.image,archived.backImage,archived.quantity],[front,back,published.quantity]);
 assert.equal((await push([{...change(published),revision:archived.revision}])).status,409,'Removal cannot be undone by an old editor');
