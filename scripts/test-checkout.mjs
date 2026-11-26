@@ -479,3 +479,81 @@ try {
   console.error = originalConsoleError;
 }
 console.log('Verified Square hosted guest payments, signed notifications and safe processor errors.');
+
+// Unpublishing is independent of fulfilment. A product with held units must
+// disappear immediately while its existing Square checkouts retain their
+// reservation and can still complete or cancel exactly once.
+adminCookie = (await request('/api/login',{username:'Lemrix',password:fixturePassword}))
+  .headers.get('Set-Cookie').split(';')[0];
+const inventoryKey='store/v1/catalogue.json';
+const storedItems=async()=>await (await env.BUCKET.get(inventoryKey)).json();
+const unpublish=async id=>{
+  const item=(await storedItems()).find(row=>row.id===id);
+  return request('/api/items/push',{changes:[{id,revision:item.revision,remove:true}]});
+};
+for(const outcome of ['paid','cancelled']){
+  const item={...structuredClone(savedProduct),id:'removed-'+outcome};
+  await env.BUCKET.put(inventoryKey,JSON.stringify([item]));
+  const session={...attempt(),itemId:item.id};
+  assert.equal((await request('/api/checkout',session)).status,200);
+  const before=(await storedItems())[0];
+  assert.equal(before.checkoutHolds.length,1);
+  assert.equal((await unpublish(item.id)).status,200);
+  const removed=(await storedItems())[0];
+  assert.equal(removed.archived,true);
+  assert.equal(removed.quantity,before.quantity);
+  assert.deepEqual(removed.checkoutHolds,before.checkoutHolds);
+  assert.equal((await shop()).length,0,'The last listing is hidden immediately, even with a checkout in progress');
+  assert.equal((await (await request('/api/items')).json()).length,0,'Removed listings stay out of the staff editor');
+  assert.equal((await request('/api/checkout',{...attempt(),itemId:item.id,copy:0,expectedCents:2750})).status,409,
+    'A different copy cannot open a new checkout after removal');
+  assert.equal((await request('/api/checkout',session)).status,200,'An existing reserved checkout can resume');
+  assert.ok((await (await request('/api/checkout/status',{session:session.attempt})).json()).url);
+  if(outcome==='paid'){
+    const payment=recordPayment(orderByAttempt.get(session.attempt));
+    assert.equal((await event(payment)).status,200);
+    assert.equal((await event(payment)).status,200);
+    const settled=(await storedItems())[0];
+    assert.equal(settled.archived,true);
+    assert.equal(settled.quantity,before.quantity-1,'Duplicate webhooks settle the archived row once');
+    assert.equal(settled.copies[1].sold,true);
+    assert.equal(settled.checkoutHolds.length,0);
+    assert.equal((await (await track(session.attempt)).json()).status,'paid','Order tracking survives product removal');
+  }else{
+    assert.equal((await (await request('/api/checkout/cancel',{attempt:session.attempt})).json()).status,'expired');
+    const released=(await storedItems())[0];
+    assert.equal(released.archived,true);
+    assert.equal(released.quantity,before.quantity);
+    assert.equal(released.checkoutHolds.length,0);
+  }
+  assert.equal((await shop()).length,0,'Payment or cancellation cannot republish a removed item');
+}
+
+// If removal wins while a new payment link is being created, the conditional
+// stock update must reject that checkout and close its still-private link.
+const retiring={...structuredClone(savedProduct),id:'removed-during-link'};
+await env.BUCKET.put(inventoryKey,JSON.stringify([retiring]));
+const inFlight={...attempt(),itemId:retiring.id};
+const linkStarted=Promise.withResolvers(),finishLink=Promise.withResolvers();
+const removalFetch=globalThis.fetch;
+globalThis.fetch=async(url,options)=>{
+  if(options?.method==='POST' && JSON.parse(options.body).idempotency_key===inFlight.attempt){
+    linkStarted.resolve();
+    await finishLink.promise;
+  }
+  return removalFetch(url,options);
+};
+try{
+  const opening=request('/api/checkout',inFlight);
+  await linkStarted.promise;
+  assert.equal((await unpublish(retiring.id)).status,200);
+  finishLink.resolve();
+  assert.equal((await opening).status,409);
+  assert.equal(orderByAttempt.get(inFlight.attempt).state,'CANCELED');
+  assert.equal((await storedItems())[0].checkoutHolds?.length || 0,0);
+  assert.equal((await shop()).length,0);
+}finally{
+  finishLink.resolve();
+  globalThis.fetch=removalFetch;
+}
+console.log('Verified removing held and final products, preserved order settlement/tracking, cancellation and concurrent checkout safety.');

@@ -85,9 +85,7 @@ async function getCatalogue(env, initial) {
   if (!saved && env.REQUIRE_STORED_CATALOGUE) reject(503, 'The live inventory is temporarily unavailable. Please try again shortly.');
   if (!saved) return {items:initial.map(p=>({...p,revision:0})), etag:null};
   const items = await saved.json();
-  const nigi = initial.find(item => item.id === 'nigi');
   const existing = items.find(item => item.id === 'nigi');
-  if (!env.REQUIRE_STORED_CATALOGUE && nigi && !existing) items.push({...nigi, revision:0});
   if (existing?.name === 'Nigi') existing.name = 'Neegy';
   if (existing?.description === 'Nigi') existing.description = 'Neegy';
   return {items, etag:saved.etag};
@@ -103,7 +101,8 @@ async function applyListing(items,body,env) {
   if (old && body.revision !== old.revision) reject(409,'Someone edited this listing. Refresh before saving.');
   if (body.remove === true) {
     if (!old || body.create) reject(400,'Choose a published product to remove.');
-    if (old.checkoutHolds?.length) reject(409,old.name+' has items held at checkout. Try again after the checkout ends.');
+    // Removal unpublishes the listing; retain its stock and reservations so
+    // existing checkouts can still settle or release their held units safely.
     old.archived = true;
     old.revision++;
     return old.id;

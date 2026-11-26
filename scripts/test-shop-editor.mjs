@@ -120,11 +120,8 @@ assert.equal((await projection.json()).find(item=>item.id===custom.id).canBuy,fa
 const held=stored.find(item=>item.id===newId);
 held.checkoutHolds=[{provider:'square',expires:Math.floor(Date.now()/1000)+600}];
 await env.BUCKET.put(catalogueKey,JSON.stringify(stored));
-assert.equal((await push([remove])).status,409,'Active checkout holds prevent removal');
 assert.equal((await push([{...change(held),collection:'pre-orders',preorderDispatch:'2099-07-01'}])).status,409,'Cannot change dispatch terms for held units');
-held.checkoutHolds=[];
-await env.BUCKET.put(catalogueKey,JSON.stringify(stored));
-assert.equal((await push([remove])).status,200);
+assert.equal((await push([remove])).status,200,'Held products can be removed from the shop without canceling their checkouts');
 assert.ok(!(await items()).some(item=>item.id===newId),'Archived listing is absent from the editor');
 const afterRemoval=await (await call('/shop/catalogue.js',undefined,{Accept:'application/json'})).json();
 assert.ok(!afterRemoval.some(item=>item.id===newId),'Archived listing is absent from the shop');
@@ -132,7 +129,18 @@ const archived=(await (await env.BUCKET.get(catalogueKey)).json()).find(item=>it
 assert.equal(archived.archived,true);
 assert.equal(archived.revision,published.revision+1);
 assert.deepEqual([archived.image,archived.backImage,archived.quantity],[front,back,published.quantity]);
+assert.deepEqual(archived.checkoutHolds,held.checkoutHolds,'Removal preserves every checkout reservation');
 assert.equal((await push([{...change(published),revision:archived.revision}])).status,409,'Removal cannot be undone by an old editor');
+// Stored inventory remains authoritative, including an intentionally empty
+// shop. Seed/demo products must never reappear after an owner removes them.
+await env.BUCKET.put(catalogueKey,JSON.stringify([]));
+assert.deepEqual(await items(),[]);
+assert.deepEqual(await (await call('/shop/catalogue.js',undefined,{Accept:'application/json'})).json(),[]);
+const finalItem=old.find(item=>item.id==='nigi');
+await env.BUCKET.put(catalogueKey,JSON.stringify([finalItem]));
+assert.equal((await push([{id:finalItem.id,revision:finalItem.revision,remove:true}])).status,200);
+assert.deepEqual(await items(),[],'Removing the final item leaves a usable empty editor');
+assert.deepEqual(await (await call('/shop/catalogue.js',undefined,{Accept:'application/json'})).json(),[],'Removing the final item leaves an empty public shop');
 assert.equal((await call('/api/logout',{})).status,200);
 assert.equal((await call('/api/items')).status,401);
 console.log('Verified native password login, session revocation on logout, batch publication, conflict rollback and cross-origin rejection.');

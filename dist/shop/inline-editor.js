@@ -117,9 +117,8 @@ window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemo
       if(list)list.hidden=row.collection!=='pre-orders' || !(row.quantity>0) || !!model.remove;
       const undo=panel.querySelector('.inventory-remove');
       if(undo && !model.remove){
-        const held=Boolean(row.checkoutHolds?.length);
-        undo.disabled=busy() || held;
-        if(held)undo.title='Removal is available when active checkouts end.';
+        undo.disabled=busy();
+        undo.title='Removes the listing from the shop. Existing checkouts and orders are kept.';
       }
     }
     const count=el('inline-stock-count');
@@ -143,8 +142,8 @@ window.LemrixInlineEditor = function createInlineEditor({read, write, toggleRemo
     remove.type='button';remove.className='inventory-remove';
     remove.textContent=model.remove?'Undo removal':row.create?'Discard draft':'Remove product';
     remove.setAttribute('aria-label',remove.textContent+' · '+row.name);
-    remove.disabled=busy() || (!model.remove && Boolean(row.checkoutHolds?.length));
-    if(remove.disabled && row.checkoutHolds?.length)remove.title='Removal is available when active checkouts end.';
+    remove.disabled=busy();
+    if(!model.remove && !row.create)remove.title='Removes the listing from the shop. Existing checkouts and orders are kept.';
     remove.onclick=()=>toggleRemoval(item,view);
     if(model.remove){
       panel.classList.add('pending-removal');
