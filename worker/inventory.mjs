@@ -103,7 +103,8 @@ async function applyListing(items,body,env) {
   if (old && body.revision !== old.revision) reject(409,'Someone edited this listing. Refresh before saving.');
   if (body.remove === true) {
     if (!old || body.create) reject(400,'Choose a published product to remove.');
-    if (old.checkoutHolds?.length) reject(409,old.name+' has items held at checkout. Try again after the checkout ends.');
+    // Archiving hides the listing but preserves its stock and active checkout holds.
+    // Existing Square orders can still settle against this record.
     old.archived = true;
     old.revision++;
     return old.id;
